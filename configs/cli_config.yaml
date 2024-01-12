@@ -1,0 +1,19 @@
+additional_arguments:
+  - name: custom.project_name
+    default: local_project
+  - name: custom.model_name
+    default: local_model
+  - name: custom.dataset_name
+    default: local_dataset
+  - name: custom.use_wandb
+    default: true
+  - name: custom.experiment_name
+    default: none
+  - name: custom.name
+    default: ""
+
+link_arguments:
+  - src: custom.project_name
+    dest: trainer.logger.init_args.name
+  - src: custom.use_wandb
+    dest: model.init_args.use_wandb
