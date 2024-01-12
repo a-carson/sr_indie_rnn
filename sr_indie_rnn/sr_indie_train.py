@@ -167,7 +167,7 @@ class SRIndieRNN(pl.LightningModule):
         self.model.reset_state()
 
         y_pred_44k, loss = self.validate_at_sample_rate(x, y, torch.ones(1, device=x.device))
-        self.log("val_loss_44k", loss, on_epoch=True, prog_bar=True, logger=True)
+        self.log("val_loss", loss, on_epoch=True, prog_bar=True, logger=True)
 
         _, loss = self.validate_at_sample_rate(x, y, 2 * torch.ones(1, device=x.device))
         self.log("val_loss_88k", loss, on_epoch=True, prog_bar=True, logger=True)
