@@ -21,7 +21,7 @@ class RNN(torch.nn.Module):
         states, last_state = self.rec(x, self.state)
         out = self.linear(states)
         if self.residual:
-            out += x
+            out += x[..., 0].unsqueeze(-1)
 
         self.state = last_state
         return out, states
