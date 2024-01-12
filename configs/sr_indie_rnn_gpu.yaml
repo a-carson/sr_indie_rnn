@@ -4,7 +4,7 @@ seed_everything: 0
 
 custom:
   project_name: rn_indie_rnn
-  use_wandb: false
+  use_wandb: true
   experiment_name: local
   name: sr_conditioned_gru_16
 
