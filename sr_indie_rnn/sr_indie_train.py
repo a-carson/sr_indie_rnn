@@ -61,8 +61,21 @@ class BaselineRNN(pl.LightningModule):
 
     def validation_step(self, batch, batch_idx):
         x, y = batch
+        y_pred = torch.zeros_like(y)
         self.model.reset_state()
-        y_pred, _ = self.model(x)
+        frame_size = self.sample_rate
+        num_frames = int(np.floor(x.shape[1] / frame_size))
+
+        # process in 1s frames
+        for n in range(num_frames):
+            start = frame_size * n
+            end = frame_size * (n+1)
+            x_frame = x[:, start:end, :]
+            y_pred_frame, _ = self.model(x_frame)
+            y_pred[:, start:end, :] = y_pred_frame
+            self.model.detach_state()
+
+
         loss = self.loss_module(y, y_pred)
         self.log("val_loss", loss, on_epoch=True, prog_bar=True, logger=True)
 
