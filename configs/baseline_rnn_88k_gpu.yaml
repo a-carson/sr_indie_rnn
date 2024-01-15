@@ -54,7 +54,7 @@ data:
     test_sequence_length_seconds: 5.0
     batch_size: 16
     train_input: '/disk/scratch1/s1409071/audio_datasets/dist_fx/88kHz/train/muff-input.wav'
-    train_target: '/disk/scratch1/s1409071/audio_datasets/dist_fx/train/88kHz/muff-target.wav'
+    train_target: '/disk/scratch1/s1409071/audio_datasets/dist_fx/88kHz/train/muff-target.wav'
     val_input: '/disk/scratch1/s1409071/audio_datasets/dist_fx/88kHz/val/muff-input.wav'
     val_target: '/disk/scratch1/s1409071/audio_datasets/dist_fx/88kHz/val/muff-target.wav'
     test_input: '/disk/scratch1/s1409071/audio_datasets/dist_fx/88kHz/test/muff-input.wav'
