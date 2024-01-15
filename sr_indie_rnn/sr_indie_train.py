@@ -169,18 +169,18 @@ class SRIndieRNN(pl.LightningModule):
         y_pred_44k, loss = self.validate_at_sample_rate(x, y, torch.ones(1, device=x.device))
         self.log("val_loss", loss, on_epoch=True, prog_bar=True, logger=True)
 
-        _, loss = self.validate_at_sample_rate(x, y, 2 * torch.ones(1, device=x.device))
+        y_pred_88k, loss = self.validate_at_sample_rate(x, y, 2 * torch.ones(1, device=x.device))
         self.log("val_loss_88k", loss, on_epoch=True, prog_bar=True, logger=True)
 
         # SAVE AUDIO (at 44k)
         if self.current_epoch == 0:
-            self.log_audio('Val_A_target', y[0, :, :])
-            self.log_audio('Val_B_target', y[int(x.shape[0] / 2), :, :])
-            self.log_audio('Val_C_target', y[-1, :, :])
+            self.log_audio('Val_A_target', y[0, :, :], self.sample_rate)
+            self.log_audio('Val_B_target', y[int(x.shape[0] / 2), :, :], self.sample_rate)
+            self.log_audio('Val_C_target', y[-1, :, :], self.sample_rate)
 
-        self.log_audio('Val_A_44k', y_pred_44k[0, :, :])
-        self.log_audio('Val_B_44k', y_pred_44k[int(x.shape[0]/2), :, :])
-        self.log_audio('Val_C_44k', y_pred_44k[-1, :, :])
+        self.log_audio('Val_A_88k', y_pred_88k[0, :, :], self.sample_rate * 2)
+        self.log_audio('Val_B_88k', y_pred_88k[int(x.shape[0]/2), :, :], self.sample_rate * 2)
+        self.log_audio('Val_C_88k', y_pred_88k[-1, :, :], self.sample_rate * 2)
 
 
     def validate_at_sample_rate(self, x, y, factor):
@@ -190,6 +190,7 @@ class SRIndieRNN(pl.LightningModule):
         y_pred, _ = self.forward(x, factor)
         loss = self.loss_module(y, y_pred)
         return y_pred, loss
+
     def test_step(self, batch, batch_idx):
         x, y = batch
         self.model.reset_state()
@@ -198,15 +199,15 @@ class SRIndieRNN(pl.LightningModule):
         self.log("test_loss", loss, on_epoch=True, prog_bar=False, logger=True)
 
         # SAVE AUDIO
-        self.log_audio('Test', torch.flatten(y_pred))
+        self.log_audio('Test', torch.flatten(y_pred), self.sample_rate)
 
     def configure_optimizers(self):
         return torch.optim.Adam(self.parameters(), lr=self.learning_rate, eps=1e-08, weight_decay=0)
 
 
-    def log_audio(self, caption, audio):
+    def log_audio(self, caption, audio, sample_rate):
         if self.use_wandb:
-            wandb.log({'Audio/' + caption: wandb.Audio(audio.cpu().detach(), caption=caption, sample_rate=self.sample_rate),
+            wandb.log({'Audio/' + caption: wandb.Audio(audio.cpu().detach(), caption=caption, sample_rate=sample_rate),
                       'epoch': self.current_epoch})
 
     def resampler(self, x, ratio: tuple):
