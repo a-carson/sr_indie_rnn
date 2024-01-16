@@ -54,12 +54,13 @@ data:
     val_sequence_length_seconds: 5.0
     test_sequence_length_seconds: 5.0
     batch_size: 16
-    train_input: '../../audio_datasets/dist_fx/train/muff-input.wav'
-    train_target: '../../audio_datasets/dist_fx/train/muff-target.wav'
-    val_input: '../../audio_datasets/dist_fx/val/muff-input.wav'
-    val_target: '../../audio_datasets/dist_fx/val/muff-target.wav'
-    test_input: '../../audio_datasets/dist_fx/test/muff-input.wav'
-    test_target: '../../audio_datasets/dist_fx/test/muff-target.wav'
+    train_input: '/disk/scratch1/s1409071/audio_datasets/dist_fx/train/muff-input.wav'
+    train_target: '/disk/scratch1/s1409071/audio_datasets/dist_fx/train/muff-target.wav'
+    val_input: '/disk/scratch1/s1409071/audio_datasets/dist_fx/val/muff-input.wav'
+    val_target: '/disk/scratch1/s1409071/audio_datasets/dist_fx/val/muff-target.wav'
+    test_input: '/disk/scratch1/s1409071/audio_datasets/dist_fx/test/muff-input.wav'
+    test_target: '/disk/scratch1/s1409071/audio_datasets/dist_fx/test/muff-target.wav'
+
 
 
 
