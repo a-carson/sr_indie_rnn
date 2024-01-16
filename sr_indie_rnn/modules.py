@@ -2,14 +2,16 @@ import torch
 
 class RNN(torch.nn.Module):
 
-    def __init__(self, cell_type, hidden_size, in_channels=1, out_channels=1, residual_connection=True, time_step=1.0):
+    def __init__(self, cell_type, hidden_size, in_channels=1, out_channels=1, residual_connection=True, os_factor=1.0):
         super().__init__()
         if cell_type == 'gru':
             self.rec = torch.nn.GRU(input_size=in_channels, hidden_size=hidden_size, batch_first=True)
         elif cell_type == 'lstm':
             self.rec = torch.nn.LSTM(input_size=in_channels, hidden_size=hidden_size, batch_first=True)
-        elif cell_type == 'my_gru':
-            self.rec = MyGRU(input_size=in_channels, hidden_size=hidden_size, time_step=time_step)
+        elif cell_type == 'euler_gru':
+            self.rec = VariableSampleRateGRU(input_size=in_channels, hidden_size=hidden_size, batch_first=True, os_factor=os_factor, improved_euler=False)
+        elif cell_type == 'improved_euler_gru':
+            self.rec = VariableSampleRateGRU(input_size=in_channels, hidden_size=hidden_size, batch_first=True, os_factor=os_factor, improved_euler=True)
         else:
             self.rec = torch.nn.RNN(hidden_size=hidden_size, input_size=in_channels, batch_first=True)
         self.linear = torch.nn.Linear(in_features=hidden_size, out_features=out_channels)
@@ -46,40 +48,154 @@ class RNNCell(torch.nn.Module):
     def forward(self, x, h0=None):
         return self.rec(x, h0)
 
+class VariableSampleRateGRU(torch.nn.GRU):
+    def __init__(self, input_size, hidden_size,
+                 bias=True, batch_first=False,
+                 os_factor=1.0, improved_euler=False):
+        super().__init__(input_size=input_size,
+                         hidden_size=hidden_size,
+                         bias=bias,
+                         batch_first=batch_first)
+        self.improved = improved_euler
+        self.os_factor = os_factor
+        self.d_line_method = False
+        self.cell = torch.nn.GRUCell(input_size=input_size, hidden_size=hidden_size, bias=bias)
 
-class MyGRU(torch.nn.Module):
-    def __init__(self,
-                 hidden_size,
-                 time_step,
-                 input_size=1):
-        super().__init__()
-        self.gru = torch.nn.GRUCell(input_size=input_size,
-                                    hidden_size=hidden_size)
-        self.time_step = time_step
-        self.hidden_size = hidden_size
-        self.A = torch.nn.Parameter(torch.Tensor([0.001]))
+    def forward(self, x, h=None):
 
-    def forward(self, x, state):
         batch_size = x.shape[0]
-        length = x.shape[1]
+        num_samples = x.shape[1]
+        k = 1/self.os_factor
 
-        if state is None:
-            state = torch.zeros(batch_size, self.hidden_size, device=x.device)
-        residual = state.clone()
-        out = torch.empty(batch_size, length, self.hidden_size, device=x.device)
+        if h is None:
+            h = torch.zeros(batch_size, self.hidden_size, device=x.device)
+        else:
+            h = h.view(batch_size, self.hidden_size)
 
-        for i in range(length):
-            # residual = self.gru(x[:, i, :], state.clone()) - state
-            # state += self.time_step * self.A * residual
-            # out[:, i, :] = state
-            # #
-            # last run
-            residual = self.gru(x[:, i, :], residual)
-            state += self.A * residual
-            out[:, i, :] = state
+        states = torch.zeros(batch_size, num_samples, self.hidden_size, device=x.device)
 
-        return out, state
+        if self.improved:
+            num_samples -= 1
 
+        for i in range(num_samples):
+
+            xi = x[:, i, :]
+
+            if self.improved:
+                xi_next = x[:, i + 1, :]
+                f = self.nonlinearity(xi, h)
+                h_next_guess = h + k * f
+                h = h + k / 2 * (f + self.nonlinearity(xi_next, h_next_guess))
+            else:
+                nl = self.nonlinearity(xi, h)
+                h = h + k * nl
+
+            states[:, i, :] = h
+
+        return states, h.view(1, batch_size, self.hidden_size)
+
+    def nonlinearity(self, x, h):
+        h_next = self.cell(x, h)
+        return h_next - h
+
+class VariableDelayLineGRU(torch.nn.GRU):
+    def __init__(self, input_size, hidden_size,
+                 bias=True, batch_first=False,
+                 os_factor=1.0, improved_euler=False):
+        super().__init__(input_size=input_size,
+                         hidden_size=hidden_size,
+                         bias=bias,
+                         batch_first=batch_first)
+        self.improved = improved_euler
+        self.os_factor = os_factor
+        self.d_line_method = False
+        self.cell = torch.nn.GRUCell(input_size=input_size, hidden_size=hidden_size, bias=bias)
+
+    def forward(self, x, h=None):
+
+        batch_size = x.shape[0]
+        num_samples = x.shape[1]
+
+        if h is None:
+            h = torch.zeros(batch_size, self.hidden_size, device=x.device)
+        else:
+            h = h.view(batch_size, self.hidden_size)
+
+        states = torch.zeros(batch_size, num_samples, self.hidden_size, device=x.device)
+
+        if self.improved:
+            num_samples -= 1
+
+        for i in range(x.shape[1]):
+            h_read = states[:, i - self.os_factor, :]
+            xi = x[:, i, :]
+            nl = self.nonlinearity(xi, h_read)
+            h = h_read + nl
+            states[:, i, :] = h
+
+        return states, h.view(1, batch_size, self.hidden_size)
+
+    def nonlinearity(self, x, h):
+        h_next = self.cell(x, h)
+        return h_next - h
+
+
+# inference only -- legacy --------
+class VariableSampleRateGRUInference:
+    def __init__(self, parent: torch.nn.Module):
+        self.weight_hh_l0 = parent.rec.weight_hh_l0
+        self.weight_ih_l0 = parent.rec.weight_ih_l0
+        self.bias_hh_l0 = parent.rec.bias_hh_l0
+        self.bias_ih_l0 = parent.rec.bias_ih_l0
+        self.linear = parent.linear
+        self.hidden_size = parent.rec.hidden_size
+        self.improved = False
+
+    def forward(self, u, k=1.0, d_line=False):
+        with torch.no_grad():
+            # Init State
+            x = u.clone()
+            states = torch.zeros(x.shape[1], self.hidden_size)
+            if d_line:
+                tau = int(1/k)
+                for i in range(x.shape[1]):
+                    h_read = states[i-tau, :]
+                    xi = x[:, i, 0]
+                    nl = self.nonlinearity(h_read, xi)
+                    h = h_read + nl
+                    states[i, :] = h
+
+            else:
+                h = torch.zeros(self.hidden_size)
+                num_samples = x.shape[1]
+                if self.improved:
+                    num_samples -= 1
+
+                for i in range(num_samples):
+                    xi = x[:, i, 0]
+
+                    if self.improved:
+                        xi_next = x[:, i+1, 0]
+                        f = self.nonlinearity(h, xi)
+                        h_guess = h + k * f
+                        h += k/2 * (f + self.nonlinearity(h_guess, xi_next))
+                    else:
+                        nl = self.nonlinearity(h, xi)
+                        h += k * nl
+
+                    states[i, :] = h
+
+            return self.linear(states) + x, 0
+
+    def nonlinearity(self, h, x):
+        Wh = self.weight_hh_l0 @ h + self.bias_hh_l0
+        Wi = self.weight_ih_l0 @ x + self.bias_ih_l0
+        r = torch.sigmoid(Wi[:self.hidden_size] + Wh[:self.hidden_size])
+        z = torch.sigmoid(
+            Wi[self.hidden_size:2 * self.hidden_size] + Wh[self.hidden_size:2 * self.hidden_size])
+        n = torch.tanh(Wi[self.hidden_size * 2:self.hidden_size * 3] + r * Wh[
+                                                                           self.hidden_size * 2:self.hidden_size * 3])
+        return (1 - z) * (n - h)
 
 
 class MLP(torch.nn.Module):
