@@ -1,4 +1,5 @@
 import torch
+import numpy as np
 
 class RNN(torch.nn.Module):
 
@@ -127,7 +128,12 @@ class VariableDelayLineGRU(torch.nn.GRU):
             num_samples -= 1
 
         for i in range(x.shape[1]):
-            h_read = states[:, i - self.os_factor, :]
+            # lin. interp
+            delay_near = int(np.floor(self.os_factor))
+            delay_far = int(np.ceil(self.os_factor))
+            alpha = self.os_factor - delay_near
+            h_read = (1 - alpha) * states[:, i - delay_near, :] + alpha * states[:, i - delay_far, :]
+
             xi = x[:, i, :]
             nl = self.nonlinearity(xi, h_read)
             h = h_read + nl

@@ -227,6 +227,123 @@ class SRIndieRNN(pl.LightningModule):
         return torchaudio.functional.resample(x.permute(0, 2, 1),
                                               orig_freq=ratio[1],
                                               new_freq=ratio[0]).permute(0, 2, 1)
+
+class RNNtoSTN(pl.LightningModule):
+    def __init__(self,
+                 ckpt_path,
+                 rnn_model: torch.nn.Module,
+                 loss_module: torch.nn.Module,
+                 sample_rate: int,
+                 tbptt_steps: int = 1024,
+                 learning_rate: float = 5e-4,
+                 use_wandb: bool = False):
+
+        super().__init__()
+        # child model
+        child = rnn_model
+        # parent model
+        self.model = BaselineRNN.load_from_checkpoint(ckpt_path, map_location=self.device).model
+
+        # copy weights to variable SR model
+        child.rec.cell.weight_hh = self.model.rec.weight_hh_l0
+        child.rec.cell.weight_ih = self.model.rec.weight_ih_l0
+        child.rec.cell.bias_hh = self.model.rec.bias_hh_l0
+        child.rec.cell.bias_ih = self.model.rec.bias_ih_l0
+        self.model.rec = child.rec
+
+        self.sample_rate = sample_rate
+        self.truncated_bptt_steps = tbptt_steps
+        self.save_hyperparameters()
+        self.loss_module = loss_module
+        self.learning_rate = learning_rate
+        self.use_wandb = use_wandb
+        self.last_time = time.time()
+
+        self.automatic_optimization = False
+
+
+
+    def training_step(self, batch, batch_idx):
+
+        opt = self.optimizers()
+        x, y = batch
+        num_frames = int(np.floor(x.shape[1] / self.truncated_bptt_steps))
+
+        for n in range(num_frames):
+            opt.zero_grad()
+            warmup_step = n == 0
+
+            start = self.truncated_bptt_steps * n
+            end = self.truncated_bptt_steps * (n+1)
+            x_frame = x[:, start:end, :]
+            y_frame = y[:, start:end, :]
+
+            if warmup_step:
+                self.model.reset_state()
+                self.last_time = time.time()
+            else:
+                self.model.detach_state()
+
+            y_pred, last_state = self.model(x_frame)
+
+            if not warmup_step:
+                loss = self.loss_module(y_frame, y_pred, high_pass=True)
+                self.manual_backward(loss)
+                opt.step()
+                self.log("train_loss", loss, on_step=True, on_epoch=True, prog_bar=True, logger=True)
+
+        return
+
+    def validation_step(self, batch, batch_idx):
+        x, y = batch
+        y_pred = torch.zeros_like(y)
+        self.model.reset_state()
+        frame_size = self.sample_rate
+        num_frames = int(np.floor(x.shape[1] / frame_size))
+
+        # process in 1s frames
+        for n in range(num_frames):
+            start = frame_size * n
+            end = frame_size * (n+1)
+            x_frame = x[:, start:end, :]
+            y_pred_frame, _ = self.model(x_frame)
+            y_pred[:, start:end, :] = y_pred_frame
+            self.model.detach_state()
+
+
+        loss = self.loss_module(y, y_pred)
+        self.log("val_loss", loss, on_epoch=True, prog_bar=True, logger=True)
+
+        # SAVE AUDIO
+        if self.current_epoch == 0:
+            self.log_audio('Val_A_target', y[0, :, :])
+            self.log_audio('Val_B_target', y[int(x.shape[0] / 2), :, :])
+            self.log_audio('Val_C_target', y[-1, :, :])
+
+        self.log_audio('Val_A', y_pred[0, :, :])
+        self.log_audio('Val_B', y_pred[int(x.shape[0]/2), :, :])
+        self.log_audio('Val_C', y_pred[-1, :, :])
+
+
+    def test_step(self, batch, batch_idx):
+        x, y = batch
+        self.model.reset_state()
+        y_pred, _ = self.model(x)
+        loss = self.loss_module(y, y_pred)
+        self.log("test_loss", loss, on_epoch=True, prog_bar=False, logger=True)
+
+        # SAVE AUDIO
+        self.log_audio('Test', torch.flatten(y_pred))
+
+    def configure_optimizers(self):
+        return torch.optim.Adam(self.parameters(), lr=self.learning_rate, eps=1e-08, weight_decay=0)
+
+
+    def log_audio(self, caption, audio):
+        if self.use_wandb:
+            wandb.log({'Audio/' + caption: wandb.Audio(audio.cpu().detach(), caption=caption, sample_rate=self.sample_rate),
+                      'epoch': self.current_epoch})
+
 # class IndieRNN(pl.LightningModule):
 #     def __init__(self,
 #                  rnn_model: torch.nn.Module,
