@@ -124,4 +124,4 @@ class CustomLightningCLI(LightningCLI):
 
 
     def after_fit(self) -> None:
-        self.trainer.test(ckpt_path='last', dataloaders=self.datamodule.test_dataloader())
+        self.trainer.test(ckpt_path='best', dataloaders=self.datamodule.test_dataloader())
