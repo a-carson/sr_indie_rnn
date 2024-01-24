@@ -333,6 +333,7 @@ class RNNtoSTN(pl.LightningModule):
         self.log("test_loss", loss, on_epoch=True, prog_bar=False, logger=True)
 
         # SAVE AUDIO
+        self.log_audio('Test_target', torch.flatten(y))
         self.log_audio('Test', torch.flatten(y_pred))
 
     def configure_optimizers(self):
@@ -341,7 +342,7 @@ class RNNtoSTN(pl.LightningModule):
 
     def log_audio(self, caption, audio):
         if self.use_wandb:
-            wandb.log({'Audio/' + caption: wandb.Audio(audio.cpu().detach(), caption=caption, sample_rate=self.sample_rate),
+            wandb.log({'Audio/' + caption: wandb.Audio(audio.cpu().detach(), caption=caption, sample_rate=int(self.sample_rate * self.model.rec.os_factor)),
                       'epoch': self.current_epoch})
 
 # class IndieRNN(pl.LightningModule):
