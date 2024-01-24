@@ -242,7 +242,8 @@ class RNNtoSTN(pl.LightningModule):
         # child model
         child = rnn_model
         # parent model
-        self.model = BaselineRNN.load_from_checkpoint(ckpt_path, map_location=self.device).model
+        pretrained_pl_model = BaselineRNN.load_from_checkpoint(ckpt_path, map_location=self.device)
+        self.model = pretrained_pl_model.model
 
         # copy weights to variable SR model
         child.rec.cell.weight_hh = self.model.rec.weight_hh_l0
@@ -252,6 +253,7 @@ class RNNtoSTN(pl.LightningModule):
         self.model.rec = child.rec
 
         self.sample_rate = sample_rate
+        self.model.rec.os_factor = sample_rate / pretrained_pl_model.sample_rate
         self.truncated_bptt_steps = tbptt_steps
         self.save_hyperparameters()
         self.loss_module = loss_module
