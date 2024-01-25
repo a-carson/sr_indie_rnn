@@ -23,11 +23,11 @@ target_paths = ['../../../audio_datasets/dist_fx/test/muff-target.wav',
                '../../../audio_datasets/dist_fx/88kHz/test/muff-target.wav']
 
 # SETTINGS
-method = 'hybrid'
+method = 'stn'
 dur_seconds = 1.0
 start_seconds = 40.0
-OS = [1, 48/44.1, 2, 96/44.1]
-sample_rate_base = 44100
+OS = [1, 88.2/96]
+sample_rate_base = 88200
 
 in_type = 'sine'
 gain = 0.1
@@ -35,7 +35,7 @@ f0 = 1245
 resample_before_plot = False
 cutoff_freq_snr = 10e3
 
-model = BaselineRNN.load_from_checkpoint('../pretrained/ht1_gru64_epoch=898-step=830676.ckpt', map_location='cpu').model
+model = BaselineRNN.load_from_checkpoint('../pretrained/muff_gru16_88k_epoch=339-step=314160.ckpt', map_location='cpu').model
 base_rnn = model.rec
 cell = torch.nn.GRUCell(hidden_size=base_rnn.hidden_size,
                         input_size=base_rnn.input_size,
@@ -46,22 +46,21 @@ cell.bias_hh = base_rnn.bias_hh_l0
 cell.bias_ih = base_rnn.bias_ih_l0
 
 
-if (method == 'd_line') or (method == 'stn') or (method == 'stn_improved') or (method == 'hybrid'):
-    model = BaselineRNN.load_from_checkpoint('../pretrained/ht1_gru64_epoch=898-step=830676.ckpt', map_location='cpu').model
-    if method == 'd_line':
-        child_rec = DelayLineRNN(cell=cell)
-    elif method == 'hybrid':
-        child_rec = HybridSTNDelayLineRNN(cell=cell)
-    else:
-        child_rec = STNRNN(cell=cell)
-        child_rec.improved = method == 'stn_improved'
-    # copy weights to variable SR model
-    model.rec = child_rec
-elif method == 'conditioned':
-    model = SRIndieRNN.load_from_checkpoint('../pretrained/muff_sr_indie_gru16.ckpt', map_location='cpu').model
+if method == 'd_line':
+    child_rec = DelayLineRNN(cell=cell)
+elif method == 'hybrid':
+    child_rec = HybridSTNDelayLineRNN(cell=cell)
 else:
-    model = BaselineRNN.load_from_checkpoint('../pretrained/muff_improved_slow_gru_16_pretrained.ckpt',
-                                             map_location='cpu').model
+    child_rec = STNRNN(cell=cell)
+    child_rec.improved = method == 'stn_improved'
+
+# copy weights to variable SR model
+model.rec = child_rec
+# if method == 'conditioned':
+#     model = SRIndieRNN.load_from_checkpoint('../pretrained/muff_sr_indie_gru16.ckpt', map_location='cpu').model
+# else:
+#     model = BaselineRNN.load_from_checkpoint('../pretrained/muff_improved_slow_gru_16_pretrained.ckpt',
+#                                              map_location='cpu').model
 
 model.rec.improved = method == 'stn_improved'
 
