@@ -207,6 +207,160 @@ class MLP(torch.nn.Module):
         return self.model(x)
 
 
+class GatedConv1D(torch.nn.Module):
+
+    """
+    Single 1D convolutional layer with residual connection
+    """
+
+    def __init__(self,
+                 in_channels,
+                 out_channels,
+                 dilation,
+                 kernel_size,
+                 fully_connected):
+        super(GatedConv1D, self).__init__()
+
+        self.in_channels = in_channels
+        self.out_channels = out_channels
+        self.fully_connected = fully_connected
+
+        padding = int((kernel_size - 1) * dilation / 2)
+
+        self.conv = torch.nn.Conv1d(in_channels=in_channels,
+                                    out_channels=out_channels * 2,
+                                    kernel_size=kernel_size,
+                                    dilation=dilation,
+                                    padding=padding)
+
+        self.residual_mix = torch.nn.Conv1d(in_channels=in_channels if fully_connected else out_channels,
+                                            out_channels=out_channels if fully_connected else in_channels,
+                                            # change to out_channels for more overall params
+                                            kernel_size=1,
+                                            stride=1,
+                                            padding=0)
+
+    def forward(self, x):
+        y = self.conv(x)  # (N, 2*C, L)
+        # gated activation
+        z = torch.tanh(y[:, :self.out_channels, :]) * torch.sigmoid(y[:, self.out_channels:, :])  # (N, C, L)
+        if self.fully_connected:
+            x = self.residual_mix(x) + z  # (N, 1, L)
+        else:
+            x = self.residual_mix(z) + x
+        return x, z
+
+
+class GCNBlock(torch.nn.Module):
+    """
+    Block of serially connected dilated convolutional layers
+    """
+    def __init__(self,
+                 in_channels,
+                 out_channels,
+                 kernel_size,
+                 num_layers,
+                 dilation_growth,
+                 fully_connected):
+        super(GCNBlock, self).__init__()
+
+        self.out_channels = out_channels
+        self.num_layers = num_layers
+        self.layers = torch.nn.ModuleList()
+
+        dilations = [dilation_growth ** l for l in range(num_layers)]
+        for dilation in dilations:
+            self.layers.append(GatedConv1D(in_channels=in_channels,
+                                           out_channels=out_channels,
+                                           kernel_size=kernel_size,
+                                           dilation=dilation,
+                                           fully_connected=fully_connected))
+            if fully_connected:
+                in_channels = out_channels
+
+    # expect shape: (N, C, L)
+    def forward(self, x):
+        batch_size = x.shape[0]
+        length = x.shape[2]
+
+        z = torch.empty([batch_size, self.num_layers * self.out_channels, length]).to(x.device)
+
+        for l, layer in enumerate(self.layers):
+            x, zn = layer(x)
+            z[:, l * self.out_channels: (l + 1) * self.out_channels, :] = zn
+
+        return x, z
+
+
+class GCNNet(torch.nn.Module):
+    """
+    End-to-end GCN network (WaveNet), including linear mixing of all intermediate activations
+    """
+    def __init__(self,
+                 num_blocks=1,
+                 layers_per_block=10,
+                 in_channels=1,
+                 out_channels=1,
+                 hidden_channels=16,
+                 kernel_size=3,
+                 dilation_growth=2,
+                 fully_connected=False):
+        super(GCNNet, self).__init__()
+
+        self.layers_per_block = layers_per_block
+        self.hidden_channels = hidden_channels
+        self.blocks = torch.nn.ModuleList()
+
+        for b in range(num_blocks):
+            self.blocks.append(GCNBlock(in_channels=in_channels,
+                                        out_channels=hidden_channels,
+                                        kernel_size=kernel_size,
+                                        dilation_growth=dilation_growth,
+                                        num_layers=layers_per_block,
+                                        fully_connected=fully_connected))
+
+        # 1x1 convolution as linear mixer
+        self.blocks.append(
+            torch.nn.Conv1d(in_channels=hidden_channels * layers_per_block * num_blocks,
+                            out_channels=out_channels,
+                            kernel_size=1))
+
+    # expect shape (N, C, L)
+    def forward(self, x):
+        batch_size = x.shape[0]
+        length = x.shape[2]
+
+        # init activations tensor with correct size for output mixer
+        z = torch.empty([batch_size, self.blocks[-1].in_channels, length]).to(x.device)
+
+        for n, block in enumerate(self.blocks[:-1]):
+            x, zn = block(x)
+            z[:,
+            n * self.hidden_channels * self.layers_per_block:(n + 1) * self.hidden_channels * self.layers_per_block,
+            :] = zn
+
+        # return mixed output
+        return self.blocks[-1](z)
+
+
+class ConvInputRNN(RNN):
+    """
+    RNN with a CNN appended to the front -- out_channels of the CNN must equal out_channels of RNN
+    """
+    def __init__(self, conv_module: torch.nn.Module,
+        cell_type, hidden_size, in_channels=1, out_channels=1, residual_connection=True, os_factor=1.0):
+        super().__init__(cell_type, hidden_size, in_channels, out_channels, residual_connection, os_factor)
+        self.conv = conv_module
+
+
+    # expect input: (N, L, C), same as base RNN class
+    def forward(self, x):
+        x = self.conv(x.permute(0, 2, 1)).permute(0, 2, 1)
+        return super().forward(x)
+
+
+
+
 
 
 

@@ -4,6 +4,9 @@ import time
 import torch
 import wandb
 import numpy as np
+import matplotlib.pyplot as plt
+import utils.loss_modules
+
 
 class BaselineRNN(pl.LightningModule):
     def __init__(self,
@@ -257,6 +260,8 @@ class RNNtoSTN(pl.LightningModule):
         self.truncated_bptt_steps = tbptt_steps
         self.save_hyperparameters()
         self.loss_module = loss_module
+        self.mrsl = utils.loss_modules.MRSL(sample_rate=sample_rate / int(self.model.rec.os_factor))        # rounded
+        self.spec_loss = utils.loss_modules.SpectralLoss(n_fft=2048, win_length=2048, hop_length=512)
         self.learning_rate = learning_rate
         self.use_wandb = use_wandb
         self.last_time = time.time()
@@ -331,9 +336,25 @@ class RNNtoSTN(pl.LightningModule):
         x, y = batch
         self.model.reset_state()
         y_pred, _ = self.model(x)
-        loss = self.loss_module(y, y_pred)
-        self.log("test_loss", loss, on_epoch=True, prog_bar=False, logger=True)
 
+        os = int(self.model.rec.os_factor)
+        y = torchaudio.functional.resample(y, orig_freq=os, new_freq=1)
+        y_pred = torchaudio.functional.resample(y_pred, orig_freq=os, new_freq=1)
+
+        loss = self.loss_module(y, y_pred)
+        spec_conv, mag, err = self.spec_loss(y.squeeze(-1), y_pred.squeeze(-1))
+        self.log("test_loss_esr", loss, on_epoch=True, prog_bar=False, logger=True)
+        self.log("spec_conv", spec_conv, on_epoch=True, prog_bar=False, logger=True)
+        self.log("spec_mag", mag, on_epoch=True, prog_bar=False, logger=True)
+        freqs = self.sample_rate / os / self.spec_loss.n_fft * torch.arange(0, self.spec_loss.n_fft // 2 + 1)
+        plt.plot(freqs, 20 * torch.log10(err).cpu())
+        plt.ylim([-60, 0])
+        plt.xlabel('Freq [Hz]')
+        plt.ylabel('dB')
+        if self.use_wandb:
+            wandb.log({"Spectral error": plt})
+        else:
+            plt.show()
         # SAVE AUDIO
         self.log_audio('Test_target', torch.flatten(y))
         self.log_audio('Test', torch.flatten(y_pred))
@@ -346,6 +367,77 @@ class RNNtoSTN(pl.LightningModule):
         if self.use_wandb:
             wandb.log({'Audio/' + caption: wandb.Audio(audio.cpu().detach(), caption=caption, sample_rate=int(self.sample_rate * self.model.rec.os_factor)),
                       'epoch': self.current_epoch})
+
+class BaselineCNN(pl.LightningModule):
+    def __init__(self,
+                 model: torch.nn.Module,
+                 loss_module: torch.nn.Module,
+                 sample_rate: int,
+                 learning_rate: float = 5e-4,
+                 use_wandb: bool = False):
+
+        super().__init__()
+        self.model = model
+        self.sample_rate = sample_rate
+        self.save_hyperparameters()
+        self.loss_module = loss_module
+        self.learning_rate = learning_rate
+        self.use_wandb = use_wandb
+        self.last_time = time.time()
+        self.automatic_optimization = False
+
+    def forward(self, x):
+        return self.model(x.permute(0, 2, 1)).permute(0, 2, 1)
+    def training_step(self, batch, batch_idx):
+
+        opt = self.optimizers()
+        x, y = batch
+
+        opt.zero_grad()
+
+        y_pred = self.forward(x)
+        loss = self.loss_module(y, y_pred, high_pass=True)
+        self.manual_backward(loss)
+        opt.step()
+        self.log("train_loss", loss, on_step=True, on_epoch=True, prog_bar=True, logger=True)
+
+        return
+
+    def validation_step(self, batch, batch_idx):
+        x, y = batch
+        y_pred = self.forward(x)
+        loss = self.loss_module(y, y_pred)
+        self.log("val_loss", loss, on_epoch=True, prog_bar=True, logger=True)
+
+        # SAVE AUDIO
+        if self.current_epoch == 0:
+            self.log_audio('Val_A_target', y[0, :, :])
+            self.log_audio('Val_B_target', y[int(x.shape[0] / 2), :, :])
+            self.log_audio('Val_C_target', y[-1, :, :])
+
+        self.log_audio('Val_A', y_pred[0, :, :])
+        self.log_audio('Val_B', y_pred[int(x.shape[0]/2), :, :])
+        self.log_audio('Val_C', y_pred[-1, :, :])
+
+
+    def test_step(self, batch, batch_idx):
+        x, y = batch
+        y_pred = self.forward(x)
+        loss = self.loss_module(y, y_pred)
+        self.log("test_loss", loss, on_epoch=True, prog_bar=False, logger=True)
+
+        # SAVE AUDIO
+        self.log_audio('Test', torch.flatten(y_pred))
+
+    def configure_optimizers(self):
+        return torch.optim.Adam(self.parameters(), lr=self.learning_rate, eps=1e-08, weight_decay=0)
+
+
+    def log_audio(self, caption, audio):
+        if self.use_wandb:
+            wandb.log({'Audio/' + caption: wandb.Audio(audio.cpu().detach(), caption=caption, sample_rate=self.sample_rate),
+                      'epoch': self.current_epoch})
+
 
 # class IndieRNN(pl.LightningModule):
 #     def __init__(self,
