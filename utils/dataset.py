@@ -4,6 +4,7 @@ import torchaudio
 import json
 import pytorch_lightning as pl
 from torch.utils.data import DataLoader
+import os
 
 class RNNDataModule(pl.LightningDataModule):
 
@@ -16,10 +17,11 @@ class RNNDataModule(pl.LightningDataModule):
                         train_sequence_length_seconds: float,
                         val_sequence_length_seconds: float,
                         test_sequence_length_seconds: float,
-                 batch_size: int = 1,
+                        batch_size: int = 1,
                         pin_memory: bool = True,
                         shuffle=True,
-                        os_factor: int = 1):
+                        os_factor: int = 1,
+                        base_path: str = ''):
         super().__init__()
         self.dirs = {
             "train": {"input": train_input,
@@ -29,6 +31,10 @@ class RNNDataModule(pl.LightningDataModule):
             "test": {"input": test_input,
                       "target": test_target},
         }
+        for key, value in self.dirs.items():
+            for k, v in value.items():
+                self.dirs[key][k] = os.path.join(base_path, v)
+
         self.train_sequence_length_seconds = train_sequence_length_seconds
         self.val_sequence_length_seconds = val_sequence_length_seconds
         self.test_sequence_length_seconds = test_sequence_length_seconds
