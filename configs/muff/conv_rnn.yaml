@@ -6,7 +6,7 @@ custom:
   project_name: rn_indie_rnn
   use_wandb: false
   experiment_name: muff
-  name: conv_gru64
+  name: muff_conv_gru64
 
 trainer:
   accelerator: cpu

@@ -6,7 +6,7 @@ custom:
   project_name: rn_indie_rnn
   use_wandb: false
   experiment_name: muff
-  name: wavenet_1_10_16_3
+  name: muff_wavenet_1_10_16_3
 
 trainer:
   accelerator: cpu
