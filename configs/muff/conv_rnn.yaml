@@ -5,12 +5,12 @@ seed_everything: 0
 custom:
   project_name: rn_indie_rnn
   use_wandb: false
-  experiment_name: local
-  name: gru_16
+  experiment_name: muff
+  name: conv_gru64
 
 trainer:
   accelerator: cpu
-  max_epochs: 250
+  max_epochs: 1000
   log_every_n_steps: 1
   enable_checkpointing: true
   check_val_every_n_epoch: 1
@@ -21,12 +21,11 @@ trainer:
         every_n_epochs: 1
         monitor: val_loss
         save_last: true
-#    - class_path: pytorch_lightning.callbacks.EarlyStopping
-#      init_args:
-#        patience: 200
-#        min_delta: 1e-4
-#        monitor: val_loss_esr
-#        stopping_threshold: 1e-4
+    - class_path: pytorch_lightning.callbacks.EarlyStopping
+      init_args:
+        patience: 100
+        min_delta: 1e-3
+        monitor: val_loss
 
 model:
   class_path: sr_indie_rnn.sr_indie_train.BaselineRNN
@@ -38,7 +37,7 @@ model:
       class_path: sr_indie_rnn.modules.ConvInputRNN
       init_args:
         cell_type: 'gru'
-        hidden_size: 16
+        hidden_size: 64
         residual_connection: true
         in_channels: 8
         conv_module:
@@ -61,12 +60,13 @@ data:
     val_sequence_length_seconds: 5.0
     test_sequence_length_seconds: 5.0
     batch_size: 16
-    train_input: '../../audio_datasets/dist_fx/train/muff-input.wav'
-    train_target: '../../audio_datasets/dist_fx/train/muff-target.wav'
-    val_input: '../../audio_datasets/dist_fx/val/muff-input.wav'
-    val_target: '../../audio_datasets/dist_fx/val/muff-target.wav'
-    test_input: '../../audio_datasets/dist_fx/test/muff-input.wav'
-    test_target: '../../audio_datasets/dist_fx/test/muff-target.wav'
+    base_path: '../../audio_datasets/dist_fx/'
+    train_input: 'train/muff-input.wav'
+    train_target: 'train/muff-target.wav'
+    val_input: 'val/muff-input.wav'
+    val_target: 'val/muff-target.wav'
+    test_input: 'test/muff-input.wav'
+    test_target: 'test/muff-target.wav'
 
 
 
