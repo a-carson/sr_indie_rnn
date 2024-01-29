@@ -3,14 +3,14 @@ import numpy as np
 
 class RNN(torch.nn.Module):
 
-    def __init__(self, cell_type, hidden_size, in_channels=1, out_channels=1, residual_connection=True, os_factor=1.0):
+    def __init__(self, cell_type, hidden_size, in_channels=1, out_channels=1, residual_connection=True, os_factor=1.0, num_layers=1):
         super().__init__()
         if cell_type == 'gru':
-            self.rec = torch.nn.GRU(input_size=in_channels, hidden_size=hidden_size, batch_first=True)
+            self.rec = torch.nn.GRU(input_size=in_channels, hidden_size=hidden_size, batch_first=True, num_layers=num_layers)
         elif cell_type == 'lstm':
-            self.rec = torch.nn.LSTM(input_size=in_channels, hidden_size=hidden_size, batch_first=True)
+            self.rec = torch.nn.LSTM(input_size=in_channels, hidden_size=hidden_size, batch_first=True, num_layers=num_layers)
         elif cell_type == 'rnn':
-            self.rec = torch.nn.RNN(hidden_size=hidden_size, input_size=in_channels, batch_first=True)
+            self.rec = torch.nn.RNN(hidden_size=hidden_size, input_size=in_channels, batch_first=True, num_layers=num_layers)
         else:
             # variable sample rate GRU types
             cell = torch.nn.GRUCell(input_size=in_channels, hidden_size=hidden_size, bias=True)
