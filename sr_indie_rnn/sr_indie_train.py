@@ -15,7 +15,8 @@ class BaselineRNN(pl.LightningModule):
                  sample_rate: int,
                  tbptt_steps: int = 1024,
                  learning_rate: float = 5e-4,
-                 use_wandb: bool = False):
+                 use_wandb: bool = False,
+                 log_audio_every_n_epochs: int = 10):
 
         super().__init__()
         self.model = rnn_model
@@ -26,6 +27,7 @@ class BaselineRNN(pl.LightningModule):
         self.learning_rate = learning_rate
         self.use_wandb = use_wandb
         self.last_time = time.time()
+        self.log_audio_every_n_epochs = log_audio_every_n_epochs
 
         self.automatic_optimization = False
 
@@ -88,9 +90,10 @@ class BaselineRNN(pl.LightningModule):
             self.log_audio('Val_B_target', y[int(x.shape[0] / 2), :, :])
             self.log_audio('Val_C_target', y[-1, :, :])
 
-        self.log_audio('Val_A', y_pred[0, :, :])
-        self.log_audio('Val_B', y_pred[int(x.shape[0]/2), :, :])
-        self.log_audio('Val_C', y_pred[-1, :, :])
+        if (self.current_epoch % self.log_audio_every_n_epochs) == 0:
+            self.log_audio('Val_A', y_pred[0, :, :])
+            self.log_audio('Val_B', y_pred[int(x.shape[0]/2), :, :])
+            self.log_audio('Val_C', y_pred[-1, :, :])
 
 
     def test_step(self, batch, batch_idx):
