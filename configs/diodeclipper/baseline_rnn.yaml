@@ -26,7 +26,7 @@ trainer:
       init_args:
         patience: 40
         min_delta: 1e-3
-        monitor: val_loss_esr
+        monitor: val_loss
         stopping_threshold: 1e-4
 
 model:
