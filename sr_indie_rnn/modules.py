@@ -1,3 +1,4 @@
+from dynonet import lti, static
 import torch
 import numpy as np
 
@@ -11,6 +12,8 @@ class RNN(torch.nn.Module):
             self.rec = torch.nn.LSTM(input_size=in_channels, hidden_size=hidden_size, batch_first=True, num_layers=num_layers)
         elif cell_type == 'rnn':
             self.rec = torch.nn.RNN(hidden_size=hidden_size, input_size=in_channels, batch_first=True, num_layers=num_layers)
+        elif cell_type == 'dyno':
+            self.rec = DynoNet(hidden_size=hidden_size, input_size=in_channels, num_layers=num_layers)
         else:
             # variable sample rate GRU types
             cell = torch.nn.GRUCell(input_size=in_channels, hidden_size=hidden_size, bias=True)
@@ -105,6 +108,48 @@ class STNRNN(torch.nn.Module):
         h_next = self.cell(x, h)
         return h_next - h
 
+class ADAARNN(torch.nn.Module):
+    def __init__(self, cell: torch.nn.RNNCellBase,
+                 os_factor=1.0,
+                 improved_euler=False):
+        super().__init__()
+        self.os_factor = os_factor
+        self.cell = cell
+        self.hidden_size = self.cell.hidden_size
+
+    def forward(self, x, h=None):
+
+        batch_size = x.shape[0]
+        num_samples = x.shape[1]
+        k = 1/self.os_factor
+
+        if h is None:
+            h = torch.zeros(batch_size, self.hidden_size, device=x.device)
+        else:
+            h = h.view(batch_size, self.hidden_size)
+
+        states = torch.zeros(batch_size, num_samples, self.hidden_size, device=x.device)
+
+        for i in range(num_samples):
+
+            xi = x[:, i, :]
+            xi1 = x[:, i-1, :]
+
+            if torch.abs(xi - xi1) > 1e-7:
+                h = (self.ad(xi, h) - self.ad(xi1, h)) / (xi - xi1)
+            else:
+                h = 0.5 * (self.cell(xi, h) + self.cell(xi1, h))
+
+            states[:, i, :] = h
+
+
+        return states, h.view(1, batch_size, self.hidden_size)
+
+    def ad(self, x, h):
+        z = self.cell.weight_hh  @ h.transpose(0, 1) + self.cell.weight_ih @ x
+        return torch.log(torch.cosh(z.squeeze(1) + self.cell.bias_hh + self.cell.bias_ih)).view(h.shape)
+
+
 class DelayLineRNN(torch.nn.Module):
     def __init__(self, cell: torch.nn.RNNCellBase,
                  os_factor=1.0):
@@ -139,6 +184,37 @@ class DelayLineRNN(torch.nn.Module):
             states[:, i, :] = h
 
         return states, h.view(1, batch_size, self.hidden_size)
+
+class DelayLineRNN2xOS(torch.nn.Module):
+    def __init__(self, cell: torch.nn.RNNCellBase,
+                 os_factor=1.0):
+        super().__init__()
+        self.os_factor = os_factor
+        self.cell = cell
+        self.hidden_size = self.cell.hidden_size
+
+    def forward(self, x, h=None):
+
+        batch_size = x.shape[0]
+        num_samples = x.shape[1]
+
+        if h is None:
+            h_eve = torch.zeros(batch_size, self.hidden_size, device=x.device)
+            h_odd = torch.zeros(batch_size, self.hidden_size, device=x.device)
+        else:
+            h_eve = h.view(batch_size, self.hidden_size).clone()
+            h_odd = h.view(batch_size, self.hidden_size).clone()
+
+        states = torch.zeros(batch_size, num_samples, self.hidden_size, device=x.device)
+
+        for i in range(num_samples//2):
+            h_eve = self.cell(x[:, 2*i, :], h_eve)
+            h_odd = self.cell(x[:, 2*i-1, :], h_odd)
+            states[:, 2*i, :] = h_eve
+            states[:, 2*i-1, :] = h_odd
+
+        return states, h_eve.view(1, batch_size, self.hidden_size)
+
 
 class HybridSTNDelayLineRNN(torch.nn.Module):
     def __init__(self, cell: torch.nn.RNNCellBase,
@@ -358,7 +434,22 @@ class ConvInputRNN(RNN):
         x = self.conv(x.permute(0, 2, 1)).permute(0, 2, 1)
         return super().forward(x)
 
+class DynoNet(torch.nn.Module):
+    def __init__(self, hidden_size, input_size, num_layers):
+        super().__init__()
+        self.layers = torch.nn.Sequential()
 
+        in_channels = input_size
+        for n in range(num_layers):
+            self.layers.append(lti.StableSecondOrderMimoLinearDynamicalOperator(in_channels=in_channels, out_channels=hidden_size))
+            self.layers.append(static.MimoStaticNonLinearity(in_channels=hidden_size, out_channels=hidden_size, activation='tanh'))
+            in_channels = hidden_size
+
+
+    def forward(self, x, h=None):
+
+        states = self.layers(x)
+        return states, states[:, -1, :]
 
 
 
