@@ -6,6 +6,7 @@ import wandb
 import numpy as np
 import matplotlib.pyplot as plt
 import utils.loss_modules
+from utils import model_from_json
 
 
 class BaselineRNN(pl.LightningModule):
@@ -16,7 +17,8 @@ class BaselineRNN(pl.LightningModule):
                  tbptt_steps: int = 1024,
                  learning_rate: float = 5e-4,
                  use_wandb: bool = False,
-                 log_audio_every_n_epochs: int = 10):
+                 log_audio_every_n_epochs: int = 10,
+                 rnn_model_json: str = ''):
 
         super().__init__()
         self.model = rnn_model
@@ -30,6 +32,9 @@ class BaselineRNN(pl.LightningModule):
         self.log_audio_every_n_epochs = log_audio_every_n_epochs
 
         self.automatic_optimization = False
+
+        if rnn_model_json != '':
+            self.model = model_from_json.RNN_from_state_dict(rnn_model_json)
 
 
 

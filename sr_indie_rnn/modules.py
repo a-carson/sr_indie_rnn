@@ -2,13 +2,31 @@ from dynonet import lti, static
 import torch
 import numpy as np
 
+
+def vector_to_tuple(x):
+    num_states = x.shape[-1]
+    assert ((num_states % 2) == 0)
+    return x[..., :num_states // 2], x[..., num_states // 2:]
+
+
+def tuple_to_vector(t):
+    return torch.cat(t, dim=-1)
+
+
+def lstm_cell_forward(cell_function, x, h):
+    hc = cell_function(x, vector_to_tuple(h))
+    return tuple_to_vector(hc)
+
+def rnn_cell_forward(cell_function, x, h):
+    return cell_function(x, h)
+
 class RNN(torch.nn.Module):
 
     def __init__(self, cell_type, hidden_size, in_channels=1, out_channels=1, residual_connection=True, os_factor=1.0, num_layers=1):
         super().__init__()
         if cell_type == 'gru':
             self.rec = torch.nn.GRU(input_size=in_channels, hidden_size=hidden_size, batch_first=True, num_layers=num_layers)
-        elif cell_type == 'lstm':
+        elif (cell_type == 'lstm') or (cell_type == "LSTM"):
             self.rec = torch.nn.LSTM(input_size=in_channels, hidden_size=hidden_size, batch_first=True, num_layers=num_layers)
         elif cell_type == 'rnn':
             self.rec = torch.nn.RNN(hidden_size=hidden_size, input_size=in_channels, batch_first=True, num_layers=num_layers)
@@ -67,6 +85,10 @@ class STNRNN(torch.nn.Module):
         self.os_factor = os_factor
         self.cell = cell
         self.hidden_size = self.cell.hidden_size
+        if type(self.cell) == torch.nn.LSTMCell:
+            self.cell_forward = lstm_cell_forward
+        else:
+            self.cell_forward = rnn_cell_forward
 
     def forward(self, x, h=None):
 
@@ -74,12 +96,14 @@ class STNRNN(torch.nn.Module):
         num_samples = x.shape[1]
         k = 1/self.os_factor
 
-        if h is None:
-            h = torch.zeros(batch_size, self.hidden_size, device=x.device)
+        if type(self.cell) == torch.nn.LSTMCell:
+            state_size = 2 * self.hidden_size
         else:
-            h = h.view(batch_size, self.hidden_size)
+            state_size = self.hidden_size
 
-        states = torch.zeros(batch_size, num_samples, self.hidden_size, device=x.device)
+        if h is None:
+            h = torch.zeros(batch_size, state_size, device=x.device)
+        states = torch.zeros(batch_size, num_samples, state_size, device=x.device)
 
         if self.improved:
             num_samples -= 1
@@ -102,10 +126,10 @@ class STNRNN(torch.nn.Module):
         if self.improved:
             states = torch.roll(states, int(1 - self.os_factor), dims=1)
 
-        return states, h.view(1, batch_size, self.hidden_size)
+        return states[..., :self.hidden_size], h
 
     def nonlinearity(self, x, h):
-        h_next = self.cell(x, h)
+        h_next = self.cell_forward(self.cell.forward, x, h)
         return h_next - h
 
 class ADAARNN(torch.nn.Module):
@@ -158,33 +182,39 @@ class DelayLineRNN(torch.nn.Module):
         self.cell = cell
         self.hidden_size = self.cell.hidden_size
 
+        if type(self.cell) == torch.nn.LSTMCell:
+            self.cell_forward = lstm_cell_forward
+        else:
+            self.cell_forward = rnn_cell_forward
+
     def forward(self, x, h=None):
 
         batch_size = x.shape[0]
         num_samples = x.shape[1]
-
-        if h is None:
-            h = torch.zeros(batch_size, self.hidden_size, device=x.device)
-        else:
-            h = h.view(batch_size, self.hidden_size)
-
-        states = torch.zeros(batch_size, num_samples, self.hidden_size, device=x.device)
 
         # lin. interp setup
         delay_near = int(np.floor(self.os_factor))
         delay_far = int(np.ceil(self.os_factor))
         alpha = self.os_factor - delay_near
 
+        if type(self.cell) == torch.nn.LSTMCell:
+            state_size = 2 * self.hidden_size
+        else:
+            state_size = self.hidden_size
+
+        states = torch.zeros(batch_size, num_samples, state_size, device=x.device)
+
         for i in range(x.shape[1]):
             # lin. interp
             h_read = (1 - alpha) * states[:, i - delay_near, :] + alpha * states[:, i - delay_far, :]
 
             xi = x[:, i, :]
-            h = self.cell(xi, h_read)
+            h = self.cell_forward(self.cell.forward, xi, h_read)
             states[:, i, :] = h
 
-        return states, h.view(1, batch_size, self.hidden_size)
+        return states[..., :self.hidden_size], h
 
+## TODO: LSTM cell
 class DelayLineRNN2xOS(torch.nn.Module):
     def __init__(self, cell: torch.nn.RNNCellBase,
                  os_factor=1.0):
@@ -223,18 +253,22 @@ class HybridSTNDelayLineRNN(torch.nn.Module):
         self.os_factor = os_factor
         self.cell = cell
         self.hidden_size = self.cell.hidden_size
+        if type(self.cell) == torch.nn.LSTMCell:
+            self.cell_forward = lstm_cell_forward
+        else:
+            self.cell_forward = rnn_cell_forward
 
     def forward(self, x, h=None):
 
         batch_size = x.shape[0]
         num_samples = x.shape[1]
 
-        if h is None:
-            h = torch.zeros(batch_size, self.hidden_size, device=x.device)
+        if type(self.cell) == torch.nn.LSTMCell:
+            state_size = 2 * self.hidden_size
         else:
-            h = h.view(batch_size, self.hidden_size)
+            state_size = self.hidden_size
 
-        states = torch.zeros(batch_size, num_samples, self.hidden_size, device=x.device)
+        states = torch.zeros(batch_size, num_samples, state_size, device=x.device)
 
         # linterp
         delay = int(np.floor(self.os_factor))
@@ -248,10 +282,10 @@ class HybridSTNDelayLineRNN(torch.nn.Module):
             h = h_read + k * nl
             states[:, i, :] = h
 
-        return states, h.view(1, batch_size, self.hidden_size)
+        return states[..., :self.hidden_size], h
 
     def nonlinearity(self, x, h):
-        h_next = self.cell(x, h)
+        h_next = self.cell_forward(self.cell.forward, x, h)
         return h_next - h
 
 
@@ -450,7 +484,6 @@ class DynoNet(torch.nn.Module):
 
         states = self.layers(x)
         return states, states[:, -1, :]
-
 
 
 
