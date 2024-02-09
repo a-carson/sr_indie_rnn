@@ -1,0 +1,15 @@
+{
+      "train": {
+      "input": "train/bender-extreme-input.wav",
+      "target": "train/bender-extreme-target.wav"
+      },
+      "val": {
+      "input": "val/bender-extreme-input.wav",
+      "target": "val/bender-extreme-target.wav"
+    },
+      "test": {
+      "input": "test/bender-extreme-input.wav",
+      "target": "test/bender-extreme-target.wav"
+    }
+
+}

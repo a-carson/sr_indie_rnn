@@ -1,0 +1,14 @@
+{
+    "train": {
+    "input": "train/ht1-input.wav",
+    "target": "train/ht1-target.wav"
+    },
+    "val": {
+    "input": "val/ht1-input.wav",
+    "target": "val/ht1-target.wav"
+  },
+    "test": {
+    "input": "test/ht1-input.wav",
+    "target": "test/ht1-target.wav"
+    }
+}

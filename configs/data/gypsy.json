@@ -1,0 +1,15 @@
+{
+      "train": {
+      "input": "train/gypsy-input.wav",
+      "target": "train/gypsy-target.wav"
+      },
+      "val": {
+      "input": "val/gypsy-input.wav",
+      "target": "val/gypsy-target.wav"
+    },
+      "test": {
+      "input": "test/gypsy-input.wav",
+      "target": "test/gypsy-target.wav"
+    }
+
+}

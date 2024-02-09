@@ -4,6 +4,7 @@ from typing import Optional
 import yaml
 from pytorch_lightning.cli import LightningCLI, LightningArgumentParser, SaveConfigCallback, Namespace, Trainer, LightningModule, get_filesystem
 from pytorch_lightning.loggers import WandbLogger
+import warnings
 
 
 logging.basicConfig()
@@ -124,4 +125,10 @@ class CustomLightningCLI(LightningCLI):
 
 
     def after_fit(self) -> None:
-        self.trainer.test(ckpt_path=self.trainer.checkpoint_callback.best_model_path, dataloaders=self.datamodule.test_dataloader())
+        ckpt_path = self.trainer.checkpoint_callback.best_model_path
+        if not os.path.isfile(ckpt_path):
+            warnings.warn("Best checkpoint path not found: {}. Using 'last' checkpoint.".format(ckpt_path))
+            ckpt_path = 'last'
+
+        self.trainer.test(ckpt_path=ckpt_path,
+                          dataloaders=self.datamodule.test_dataloader())

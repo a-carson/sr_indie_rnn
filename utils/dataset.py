@@ -5,15 +5,11 @@ import json
 import pytorch_lightning as pl
 from torch.utils.data import DataLoader
 import os
+import json
 
 class RNNDataModule(pl.LightningDataModule):
 
-    def __init__(self,  train_input: str,
-                        train_target: str,
-                        val_input: str,
-                        val_target: str,
-                        test_input: str,
-                        test_target: str,
+    def __init__(self,
                         train_sequence_length_seconds: float,
                         val_sequence_length_seconds: float,
                         test_sequence_length_seconds: float,
@@ -21,16 +17,30 @@ class RNNDataModule(pl.LightningDataModule):
                         pin_memory: bool = True,
                         shuffle=True,
                         os_factor: int = 1,
+                        config: str = '',
+                        train_input: str = '',
+                        train_target: str = '',
+                        val_input: str = '',
+                        val_target: str = '',
+                        test_input: str = '',
+                        test_target: str = '',
                         base_path: str = ''):
         super().__init__()
-        self.dirs = {
-            "train": {"input": train_input,
-                      "target": train_target},
-            "val": {"input": val_input,
-                    "target": val_target},
-            "test": {"input": test_input,
-                      "target": test_target},
-        }
+
+        if config != '':
+            with open(config, 'r') as f:
+                self.dirs = json.load(f)
+
+        else:
+            self.dirs = {
+                "train": {"input": train_input,
+                          "target": train_target},
+                "val": {"input": val_input,
+                        "target": val_target},
+                "test": {"input": test_input,
+                          "target": test_target},
+            }
+
         for key, value in self.dirs.items():
             for k, v in value.items():
                 self.dirs[key][k] = os.path.join(base_path, v)
