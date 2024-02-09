@@ -5,7 +5,7 @@ seed_everything: 0
 custom:
   project_name: rn_indie_rnn
   use_wandb: true
-  experiment_name: ht1
+  experiment_name: 192k_recorded
   name: ht1_gru64
 
 trainer:
