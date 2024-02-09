@@ -1,14 +1,14 @@
-import scipy.signal
-
-from sr_indie_rnn.sr_indie_train import SRIndieRNN, BaselineRNN
-from sr_indie_rnn.modules import STNRNN, DelayLineRNN, HybridSTNDelayLineRNN
+from sr_indie_rnn.sr_indie_train import BaselineRNN
+from sr_indie_rnn.modules import STNRNN, DelayLineRNN, HybridSTNDelayLineRNN, ADAARNN
 import torch
 import matplotlib.pyplot as plt
 import numpy as np
 from scipy.signal import chirp, spectrogram
 import torchaudio
-import matplotlib as mpl
-mpl.use("macosx")
+from utils import model_from_json
+
+
+#mpl.use("macosx")
 
 def my_fft(x, N=None):
     N_win = x.shape[-1]
@@ -17,16 +17,32 @@ def my_fft(x, N=None):
     return np.fft.fft(x * np.hanning(N_win), n=N)
     #return np.fft.fft(x, n=N)
 
-input_paths = ['../../../audio_datasets/dist_fx/test/muff-input.wav',
-               '../../../audio_datasets/dist_fx/88kHz/test/muff-input.wav']
-target_paths = ['../../../audio_datasets/dist_fx/test/muff-target.wav',
-               '../../../audio_datasets/dist_fx/88kHz/test/muff-target.wav']
+# # BIG MUFF 44k GRU64
+# ckpt = '../pretrained/muff_gru64_epoch=625-step=578424.ckpt'
+
+# BIG MUFF 88kk GRU16
+ckpt = '../pretrained/muff_gru64_epoch=625-step=578424.ckpt'
+
+# # HT1
+#ckpt = '../pretrained/ht1_gru64_epoch=898-step=830676.ckpt'
+
+# DIODE CLIPPER GRU 8
+#ckpt = '../pretrained/diodeclipper_gru8_epoch=44-step=41580.ckpt'
+
+# DIODE CLIPPER RNN 8
+#ckpt = '../pretrained/diodeclippper_rnn8_epoch=57-step=53592.ckpt'
+
+model = BaselineRNN.load_from_checkpoint(ckpt, map_location='cpu').model
+
+# PROTEUS models (from json)
+model = model_from_json.RNN_from_state_dict('../../../Proteus_Tone_Packs/PedalPack1/LittleBigMuff_HighGainPedal.json')
+
 
 # SETTINGS
-method = 'stn'
+method = 'd_line'
 dur_seconds = 1.0
 start_seconds = 40.0
-OS = [1, 88.2/96]
+OS = [1, 2, 4]
 sample_rate_base = 88200
 
 in_type = 'sine'
@@ -35,11 +51,28 @@ f0 = 1245
 resample_before_plot = False
 cutoff_freq_snr = 10e3
 
-model = BaselineRNN.load_from_checkpoint('../pretrained/muff_gru16_88k_epoch=339-step=314160.ckpt', map_location='cpu').model
+input_paths = ['../../../audio_datasets/dist_fx/test/muff-input.wav',
+               '../../../audio_datasets/dist_fx/88kHz/test/muff-input.wav']
+target_paths = ['../../../audio_datasets/dist_fx/test/muff-target.wav',
+               '../../../audio_datasets/dist_fx/88kHz/test/muff-target.wav']
+
+
+
 base_rnn = model.rec
-cell = torch.nn.GRUCell(hidden_size=base_rnn.hidden_size,
-                        input_size=base_rnn.input_size,
-                        bias=base_rnn.bias)
+
+if type(model.rec) == torch.nn.LSTM:
+    cell = torch.nn.LSTMCell(hidden_size=base_rnn.hidden_size,
+                             input_size=base_rnn.input_size,
+                             bias=base_rnn.bias)
+elif type(model.rec) == torch.nn.GRU:
+    cell = torch.nn.GRUCell(hidden_size=base_rnn.hidden_size,
+                            input_size=base_rnn.input_size,
+                            bias=base_rnn.bias)
+else:
+    cell = torch.nn.RNNCell(hidden_size=base_rnn.hidden_size,
+                            input_size=base_rnn.input_size,
+                            bias=base_rnn.bias)
+
 cell.weight_hh = base_rnn.weight_hh_l0
 cell.weight_ih = base_rnn.weight_ih_l0
 cell.bias_hh = base_rnn.bias_hh_l0
@@ -47,22 +80,21 @@ cell.bias_ih = base_rnn.bias_ih_l0
 
 
 if method == 'd_line':
-    child_rec = DelayLineRNN(cell=cell)
+    model.rec = DelayLineRNN(cell=cell)
 elif method == 'hybrid':
-    child_rec = HybridSTNDelayLineRNN(cell=cell)
-else:
-    child_rec = STNRNN(cell=cell)
-    child_rec.improved = method == 'stn_improved'
+    model.rec = HybridSTNDelayLineRNN(cell=cell)
+elif (method == 'stn') or (method == 'stn_improved'):
+    model.rec = STNRNN(cell=cell)
+    model.rec.improved = method == 'stn_improved'
+elif (method == 'adaa'):
+    model.rec = ADAARNN(cell=cell)
 
-# copy weights to variable SR model
-model.rec = child_rec
+
 # if method == 'conditioned':
 #     model = SRIndieRNN.load_from_checkpoint('../pretrained/muff_sr_indie_gru16.ckpt', map_location='cpu').model
 # else:
 #     model = BaselineRNN.load_from_checkpoint('../pretrained/muff_improved_slow_gru_16_pretrained.ckpt',
 #                                              map_location='cpu').model
-
-model.rec.improved = method == 'stn_improved'
 
 colors = ['k', '#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b','#e377c21']
 plt.figure(figsize=[10, 5])
