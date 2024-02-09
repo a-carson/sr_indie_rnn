@@ -61,7 +61,12 @@ class RNN(torch.nn.Module):
         self.state = None
 
     def detach_state(self):
-        self.state = self.state.detach()
+        if type(self.state) is tuple:
+            hidden = self.state[0].detach()
+            cell = self.state[1].detach()
+            self.state = (hidden, cell)
+        else:
+            self.state = self.state.detach()
 
 
 class RNNCell(torch.nn.Module):
@@ -213,6 +218,47 @@ class DelayLineRNN(torch.nn.Module):
             states[:, i, :] = h
 
         return states[..., :self.hidden_size], h
+
+class AllPassDelayLineRNN(torch.nn.Module):
+    def __init__(self, cell: torch.nn.RNNCellBase,
+                 os_factor=1.0):
+        super().__init__()
+        self.os_factor = os_factor
+        self.cell = cell
+        self.hidden_size = self.cell.hidden_size
+
+        if type(self.cell) == torch.nn.LSTMCell:
+            self.cell_forward = lstm_cell_forward
+        else:
+            self.cell_forward = rnn_cell_forward
+
+    def forward(self, x, h=None):
+
+        batch_size = x.shape[0]
+        num_samples = x.shape[1]
+
+        # lin. interp setup
+        delay_near = int(np.floor(self.os_factor))
+        delay_far = int(np.floor(self.os_factor)) + 1
+        alpha = self.os_factor - delay_near
+        allpass_coeff = (1 - alpha) / (1 + alpha)
+
+        if type(self.cell) == torch.nn.LSTMCell:
+            state_size = 2 * self.hidden_size
+        else:
+            state_size = self.hidden_size
+
+        states = torch.zeros(batch_size, num_samples, state_size, device=x.device)
+        h = torch.zeros(batch_size, state_size, device=x.device)
+
+        for i in range(x.shape[1]):
+            h = allpass_coeff * (states[:, i - delay_near, :] - h) + states[:, i - delay_far, :]
+            xi = x[:, i, :]
+            h_write = self.cell_forward(self.cell.forward, xi, h)
+            states[:, i, :] = h_write
+
+        return states[..., :self.hidden_size], h
+
 
 ## TODO: LSTM cell
 class DelayLineRNN2xOS(torch.nn.Module):
