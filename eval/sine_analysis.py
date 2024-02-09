@@ -1,5 +1,5 @@
 from sr_indie_rnn.sr_indie_train import BaselineRNN
-from sr_indie_rnn.modules import STNRNN, DelayLineRNN, HybridSTNDelayLineRNN, ADAARNN
+from sr_indie_rnn.modules import STNRNN, DelayLineRNN, HybridSTNDelayLineRNN, ADAARNN, AllPassDelayLineRNN
 import torch
 import matplotlib.pyplot as plt
 import numpy as np
@@ -18,10 +18,10 @@ def my_fft(x, N=None):
     #return np.fft.fft(x, n=N)
 
 # # BIG MUFF 44k GRU64
-# ckpt = '../pretrained/muff_gru64_epoch=625-step=578424.ckpt'
+#ckpt = '../pretrained/muff_gru64_epoch=625-step=578424.ckpt'
 
 # BIG MUFF 88kk GRU16
-ckpt = '../pretrained/muff_gru64_epoch=625-step=578424.ckpt'
+#ckpt = '../pretrained/muff_gru64_epoch=625-step=578424.ckpt'
 
 # # HT1
 #ckpt = '../pretrained/ht1_gru64_epoch=898-step=830676.ckpt'
@@ -30,26 +30,30 @@ ckpt = '../pretrained/muff_gru64_epoch=625-step=578424.ckpt'
 #ckpt = '../pretrained/diodeclipper_gru8_epoch=44-step=41580.ckpt'
 
 # DIODE CLIPPER RNN 8
-#ckpt = '../pretrained/diodeclippper_rnn8_epoch=57-step=53592.ckpt'
+ckpt = '../pretrained/diodeclippper_rnn8_epoch=57-step=53592.ckpt'
 
 model = BaselineRNN.load_from_checkpoint(ckpt, map_location='cpu').model
 
 # PROTEUS models (from json)
-model = model_from_json.RNN_from_state_dict('../../../Proteus_Tone_Packs/PedalPack1/LittleBigMuff_HighGainPedal.json')
+
+# STN BAD
+#model = model_from_json.RNN_from_state_dict('../../../Proteus_Tone_Packs/AmpPack1/DumbleKit_LowG_DirectOut.json')
+
+#model = model_from_json.RNN_from_state_dict('../../../Proteus_Tone_Packs/PedalPack1/TS9_HighDrive.json')
 
 
 # SETTINGS
-method = 'd_line'
+method = 'ap_d_line'
 dur_seconds = 1.0
 start_seconds = 40.0
-OS = [1, 2, 4]
-sample_rate_base = 88200
+OS = [1, 48/44.1]
+sample_rate_base = 44100
 
 in_type = 'sine'
 gain = 0.1
 f0 = 1245
 resample_before_plot = False
-cutoff_freq_snr = 10e3
+cutoff_freq_snr = 16e3
 
 input_paths = ['../../../audio_datasets/dist_fx/test/muff-input.wav',
                '../../../audio_datasets/dist_fx/88kHz/test/muff-input.wav']
@@ -81,6 +85,8 @@ cell.bias_ih = base_rnn.bias_ih_l0
 
 if method == 'd_line':
     model.rec = DelayLineRNN(cell=cell)
+elif method == 'ap_d_line':
+    model.rec = AllPassDelayLineRNN(cell=cell)
 elif method == 'hybrid':
     model.rec = HybridSTNDelayLineRNN(cell=cell)
 elif (method == 'stn') or (method == 'stn_improved'):
