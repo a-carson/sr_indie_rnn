@@ -1,6 +1,6 @@
 import time
 
-from sr_indie_rnn.modules import STNRNN, DelayLineRNN, HybridSTNDelayLineRNN, AllPassDelayLineRNN, LagrangeDelayLineRNN
+from sr_indie_rnn.modules import convert_to_sr_indie
 import torch
 import matplotlib as mpl
 import torchaudio
@@ -56,25 +56,6 @@ for f, filename in enumerate(filenames):
     device_name = pathlib.Path(filename).stem
     model = model_from_json.RNN_from_state_dict(os.path.join(base_path, filename))
 
-    base_rnn = model.rec
-    if type(model.rec) == torch.nn.LSTM:
-        cell = torch.nn.LSTMCell(hidden_size=base_rnn.hidden_size,
-                                 input_size=base_rnn.input_size,
-                                 bias=base_rnn.bias)
-    elif type(model.rec) == torch.nn.GRU:
-        cell = torch.nn.GRUCell(hidden_size=base_rnn.hidden_size,
-                                input_size=base_rnn.input_size,
-                                bias=base_rnn.bias)
-    else:
-        cell = torch.nn.RNNCell(hidden_size=base_rnn.hidden_size,
-                                input_size=base_rnn.input_size,
-                                bias=base_rnn.bias)
-    cell.weight_hh = base_rnn.weight_hh_l0
-    cell.weight_ih = base_rnn.weight_ih_l0
-    cell.bias_hh = base_rnn.bias_hh_l0
-    cell.bias_ih = base_rnn.bias_ih_l0
-
-
     for p, q in zip(ps, qs):
 
         x_up = giant_fft_upsample(x, orig_freq=q, new_freq=p)
@@ -89,20 +70,7 @@ for f, filename in enumerate(filenames):
 
         for m, method in enumerate(methods):
             i += 1
-
-            if method == 'lidl':
-                model.rec = DelayLineRNN(cell=cell)
-            elif method == 'apdl':
-                model.rec = AllPassDelayLineRNN(cell=cell)
-            elif method == 'hybrid':
-                model.rec = HybridSTNDelayLineRNN(cell=cell)
-            elif method == 'stn':
-                model.rec = STNRNN(cell=cell)
-                model.rec.improved = False
-            elif method == 'lagrange':
-                model.rec = LagrangeDelayLineRNN(cell=cell)
-
-
+            model = convert_to_sr_indie(model=model, method=method)
             model.eval()
 
             print('{}/{}: {} - os={} - {}'.format(i, total_iterations, device_name, os_factor, method))

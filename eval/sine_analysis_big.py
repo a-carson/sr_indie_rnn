@@ -1,4 +1,4 @@
-from sr_indie_rnn.modules import STNRNN, DelayLineRNN, HybridSTNDelayLineRNN, ADAARNN, AllPassDelayLineRNN, LagrangeDelayLineRNN
+from sr_indie_rnn.modules import convert_to_sr_indie
 import torch
 import matplotlib.pyplot as plt
 import numpy as np
@@ -94,40 +94,8 @@ for o, os_factor in enumerate(os_factors):
         print(filename)
         model = model_from_json.RNN_from_state_dict(os.path.join(base_path, filename))
 
-        base_rnn = model.rec
-        if type(model.rec) == torch.nn.LSTM:
-            cell = torch.nn.LSTMCell(hidden_size=base_rnn.hidden_size,
-                                     input_size=base_rnn.input_size,
-                                     bias=base_rnn.bias)
-        elif type(model.rec) == torch.nn.GRU:
-            cell = torch.nn.GRUCell(hidden_size=base_rnn.hidden_size,
-                                    input_size=base_rnn.input_size,
-                                    bias=base_rnn.bias)
-        else:
-            cell = torch.nn.RNNCell(hidden_size=base_rnn.hidden_size,
-                                    input_size=base_rnn.input_size,
-                                    bias=base_rnn.bias)
-        cell.weight_hh = base_rnn.weight_hh_l0
-        cell.weight_ih = base_rnn.weight_ih_l0
-        cell.bias_hh = base_rnn.bias_hh_l0
-        cell.bias_ih = base_rnn.bias_ih_l0
-
         for m, method in enumerate(methods):
-
-            if method == 'd_line':
-                model.rec = DelayLineRNN(cell=cell)
-            elif method == 'ap_d_line':
-                model.rec = AllPassDelayLineRNN(cell=cell)
-            elif method == 'hybrid':
-                model.rec = HybridSTNDelayLineRNN(cell=cell)
-            elif (method == 'stn') or (method == 'stn_improved'):
-                model.rec = STNRNN(cell=cell)
-                model.rec.improved = method == 'stn_improved'
-            elif (method == 'adaa'):
-                model.rec = ADAARNN(cell=cell)
-            elif method == 'lagrange':
-                model.rec = LagrangeDelayLineRNN(cell=cell)
-
+            model = convert_to_sr_indie(model=model, method=method)
 
             model.eval()
             with torch.no_grad():
