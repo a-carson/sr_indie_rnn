@@ -2,7 +2,7 @@ import numpy as np
 import torch
 import torchaudio
 import os
-from sr_indie_rnn.giant_fft_resample import giant_fft_downsample_torch
+from sr_indie_rnn.giant_fft_resample import giant_fft_downsample
 
 
 dir = '../audio/proteus'
@@ -32,7 +32,7 @@ for i, f in enumerate(filenames):
             assert(sample_rate == int(np.round(base_rate * p / q)))
 
             # METHOD 1 -- compare DOWN
-            pred_down = giant_fft_downsample_torch(pred, orig_freq=p, new_freq=q)
+            pred_down = giant_fft_downsample(pred, orig_freq=p, new_freq=q)
             esr_array[i, k, l] = torch.sum((pred_down - target)**2) / torch.sum(target ** 2)
 
             # METHOD 2 -- compare FFTs

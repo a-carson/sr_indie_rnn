@@ -8,7 +8,7 @@ from utils import model_from_json
 import os
 import pathlib
 import numpy as np
-from sr_indie_rnn.giant_fft_resample import giant_fft_upsample_torch
+from sr_indie_rnn.giant_fft_resample import giant_fft_upsample
 
 mpl.use("macosx")
 
@@ -77,7 +77,7 @@ for f, filename in enumerate(filenames):
 
     for p, q in zip(ps, qs):
 
-        x_up = giant_fft_upsample_torch(x, orig_freq=q, new_freq=p)
+        x_up = giant_fft_upsample(x, orig_freq=q, new_freq=p)
         os_factor = p / q
         sample_rate = int(np.round(sample_rate_base * os_factor))
 
