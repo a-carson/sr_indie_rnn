@@ -27,11 +27,13 @@ url: "" # the base hostname & protocol for your site, e.g. http://example.com
 github_username:  a-carson
 repository: "a-carson/sr_indie_rnn"
 # Build settings
-theme: minimal-mistakes-jekyll
+remote_theme: "mmistakes/minimal-mistakes@4.24.0"
+#theme: minimal-mistakes-jekyll
 minimal_mistakes_skin: "default" # "air", "aqua", "contrast", "dark", "dirt", "neon", "mint", "plum", "sunrise"
 plugins:
   - jekyll-feed
   - jekyll-remote-theme
+  - jekyll-include-cache
 classes: wide
 
 # Exclude from processing.
