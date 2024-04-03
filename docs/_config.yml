@@ -25,11 +25,13 @@ description: >- # this means to ignore newlines until "baseurl:"
 baseurl: /sr_indie_rnn # the subpath of your site, e.g. /blog
 url: "" # the base hostname & protocol for your site, e.g. http://example.com
 github_username:  a-carson
-
+repository: "a-carson/sr_indie_rnn"
 # Build settings
-theme: minima
+theme: minimal-mistakes-jekyll
+minimal_mistakes_skin: "default" # "air", "aqua", "contrast", "dark", "dirt", "neon", "mint", "plum", "sunrise"
 plugins:
   - jekyll-feed
+classes: wide
 
 # Exclude from processing.
 # The following items will not be processed, by default.
