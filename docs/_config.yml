@@ -18,10 +18,10 @@
 # You can create any custom variable you would like, and they will be accessible
 # in the templates via {{ site.myvariable }}.
 
-title: Sample-rate Independent Audio RNNs
+title: Sample Rate Independent RNNs for Audio Effects Processing
 email: acarson2@ed.ac.uk
 description: >- # this means to ignore newlines until "baseurl:"
-  Accompanying webpage for DAFx24.
+  Accompanying webpage for the DAFx24 submission.
 baseurl: /sr_indie_rnn # the subpath of your site, e.g. /blog
 url: "" # the base hostname & protocol for your site, e.g. http://example.com
 github_username:  a-carson
