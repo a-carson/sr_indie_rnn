@@ -22,7 +22,7 @@ title: Sample-rate Independent Audio RNNs
 email: acarson2@ed.ac.uk
 description: >- # this means to ignore newlines until "baseurl:"
   Accompanying webpage for DAFx24.
-baseurl: "" # the subpath of your site, e.g. /blog
+baseurl: /sr_indie_rnn # the subpath of your site, e.g. /blog
 url: "" # the base hostname & protocol for your site, e.g. http://example.com
 github_username:  a-carson
 
