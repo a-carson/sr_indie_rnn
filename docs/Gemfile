@@ -15,7 +15,7 @@ gem "minimal-mistakes-jekyll"
 # uncomment the line below. To upgrade, run `bundle update github-pages`.
 
 # LOCAL -- uncomment for local testing
-#gem "github-pages", group: :jekyll_plugins
+gem "github-pages", group: :jekyll_plugins
 gem "webrick", "~> 1.8"
 
 # GITHUB PAGES -- uncomment for deployment
