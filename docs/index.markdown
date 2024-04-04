@@ -24,7 +24,7 @@ These models are designed for operation at a sample rate (SR) of 44.1kHz. The au
 </p>
 <ul>
   <li style="font-size: 0.75em"> Naive (operating original RNN at different SRs, first column)</li>
-  <li style="font-size: 0.75em">State-trajectory (STN)</li>
+  <li style="font-size: 0.75em">State-trajectory network (STN)</li>
   <li style="font-size: 0.75em">Linearly interpolated delay line (LIDL) </li>
   <li style="font-size: 0.75em">All-pass filter delay line (APDL) </li>
   <li style="font-size: 0.75em">Cubic interpolated delay-line (CIDL) </li>
