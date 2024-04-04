@@ -29,7 +29,9 @@ These models are designed for operation at a sample rate (SR) of 44.1kHz. The au
   <li style="font-size: 0.75em">All-pass filter delay line (APDL) </li>
   <li style="font-size: 0.75em">Cubic interpolated delay-line (CIDL) </li>
 </ul>
-
+<p style="font-size: 0.75em">
+Note that for integer oversampling (e.g. 44.1kHz to 88.2kHz), the latter three methods produce an identical output, so only one is shown.
+</p>
 <br>
 1) Peavey 6505+ tube amp -- high gain
 <table>
