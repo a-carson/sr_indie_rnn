@@ -19,10 +19,19 @@ In recent years, machine learning approaches to modelling guitar amplifiers and 
 
 ###### <b>Audio Examples</b>
 <p style="font-size: 0.75em">
-Below are examples of five LSTM RNN models trained on different effects. All models were trained at a sample rate (SR) of 44.1kHz.
+Below are examples of five LSTM RNN models from the <a href="https://guitarml.com/tonelibrary/tonelib-pro.html">GuitarML Tone Library</a>. 
+These models are designed for operation at a sample rate (SR) of 44.1kHz. The audio examples below are the output signals when operating at different inference SRs, using the methods outlined in the paper:
 </p>
+<ul>
+  <li style="font-size: 0.75em"> Naive (operating original RNN at different SRs, first column)</li>
+  <li style="font-size: 0.75em">State-trajectory (STN)</li>
+  <li style="font-size: 0.75em">Linearly interpolated delay line (LIDL) </li>
+  <li style="font-size: 0.75em">All-pass filter delay line (APDL) </li>
+  <li style="font-size: 0.75em">Cubic interpolated delay-line (CIDL) </li>
+</ul>
+
 <br>
-1) Peavey 6505Plus tube amp -- high gain
+1) Peavey 6505+ tube amp -- high gain
 <table>
   <thead>
     <tr>
@@ -290,7 +299,7 @@ Below are examples of five LSTM RNN models trained on different effects. All mod
 </table>
 <br>
 
-4) Rockman Acoustic Simulator Pedal
+4) Rockman acoustic simulator Pedal
 <table>
   <thead>
     <tr>
@@ -379,7 +388,7 @@ Below are examples of five LSTM RNN models trained on different effects. All mod
 </table>
 <br>
 
-5) XComp Compressor Pedal
+5) Xotic SP compressor pedal
 <table>
   <thead>
     <tr>
