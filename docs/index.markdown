@@ -301,7 +301,7 @@ Note that for integer oversampling (e.g. 44.1kHz to 88.2kHz), the latter three m
 </table>
 <br>
 
-4) Rockman acoustic simulator Pedal
+4) Rockman acoustic simulator pedal
 <table>
   <thead>
     <tr>
