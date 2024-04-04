@@ -19,7 +19,7 @@ In recent years, machine learning approaches to modelling guitar amplifiers and 
 
 ###### <b>Audio Examples</b>
 <p style="font-size: 0.75em">
-Below are examples of five LSTM RNN models from the <a href="https://guitarml.com/tonelibrary/tonelib-pro.html">GuitarML Tone Library</a>. 
+Below are examples of five LSTM RNN models from the <a href="https://guitarml.com/tonelibrary/tonelib-pro.html" target="_blank" rel="noopener noreferrer">GuitarML Tone Library</a>. 
 These models are designed for operation at a sample rate (SR) of 44.1kHz. The audio examples below are the output signals when operating at different inference SRs, using the methods outlined in the paper:
 </p>
 <ul>
