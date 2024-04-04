@@ -27,7 +27,7 @@ These models are designed for operation at a sample rate (SR) of 44.1kHz. The au
   <li style="font-size: 0.75em">State-trajectory network (STN)</li>
   <li style="font-size: 0.75em">Linearly interpolated delay line (LIDL) </li>
   <li style="font-size: 0.75em">All-pass filter delay line (APDL) </li>
-  <li style="font-size: 0.75em">Cubic interpolated delay-line (CIDL) </li>
+  <li style="font-size: 0.75em">Cubic interpolated delay-line (CIDL) -- this is our recommended method for the highest quality sample rate conversion. </li>
 </ul>
 <p style="font-size: 0.75em">
 Note that for integer oversampling (e.g. 44.1kHz to 88.2kHz), the latter three methods produce an identical output, so only one is shown.
@@ -50,7 +50,7 @@ Note that for integer oversampling (e.g. 44.1kHz to 88.2kHz), the latter three m
       <th style="text-align: center">Original RNN <br> (trained at 44.1kHz)</th>
       <th style="text-align: center">STN  </th>
       <th style="text-align: center">LIDL  </th>
-      <th style="text-align: center">APDL (ours) </th>
+      <th style="text-align: center">APDL* (ours) </th>
       <th style="text-align: center">CIDL (ours) </th>
     </tr>
   </thead>
@@ -120,6 +120,9 @@ Note that for integer oversampling (e.g. 44.1kHz to 88.2kHz), the latter three m
     </tr>
   </tbody>
 </table>
+<p style="font-size: 0.75em">
+*here the APDL method produces unwanted artefacts 48kHz, as noted in the paper. This audio clip was specifically chosen to demonstrate these artefacts.
+</p>
 <br>
 
 2) Blackstar HT40 tube amp -- clean
