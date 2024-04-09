@@ -121,7 +121,7 @@ Note that for integer oversampling (e.g. 44.1kHz to 88.2kHz), the latter three m
   </tbody>
 </table>
 <p style="font-size: 0.75em">
-*here the APDL method produces unwanted artefacts 48kHz, as noted in the paper. This audio clip was specifically chosen to demonstrate these artefacts.
+*here the APDL method produces unwanted artefacts at 48kHz, as noted in the paper. This audio clip was specifically chosen to demonstrate these artefacts.
 </p>
 <br>
 
