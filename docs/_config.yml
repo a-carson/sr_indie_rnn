@@ -18,7 +18,7 @@
 # You can create any custom variable you would like, and they will be accessible
 # in the templates via {{ site.myvariable }}.
 
-title: Sample Rate Independent RNNs for Audio Effects Processing
+title:
 name: Alistair Carson
 email: acarson2@ed.ac.uk
 description: Accompanying webpage for the DAFx24 submission.

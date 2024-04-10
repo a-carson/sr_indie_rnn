@@ -3,11 +3,14 @@ layout: splash
 classes:
   - wide
 ---
-<p style="font-size: 0.75em">
-<br>
-Welcome to the accompanying web-page for our paper: <br>
-Alistair Carson, Alec Wright, Jatin Chowdhury, Vesa Välimäki and Stefan Bilbao "Sample rate independent recurrent neural networks for audio effects processing". Submitted to <em> Proceedings of the 27th International Conference on Digital Audio Effects (DAFx24) </em>, Guildford, UK, Sept. 2024. Subject to peer review.
-</p>
+<h2 align="center">Sample Rate Independent Recurrent Neural Networks for Audio Effects Processing</h2>
+<p style="font-size: 0.75em" align="center">
+Alistair Carson, Alec Wright, Jatin Chowdhury, Vesa Välimäki and Stefan Bilbao</p>
+<p style="font-size: 0.75em" align="center">
+Welcome to the accompanying web-page for our DAFx24 submission.</p>
+<p style="font-size: 0.75em" align="center">
+For example code see <a href="https://github.com/a-carson/dafx24_sr_indie_rnn?tab=readme-ov-file" target="_blank" rel="noopener noreferrer"> here</a>.</p>
+
 
 
 
