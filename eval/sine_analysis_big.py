@@ -12,7 +12,7 @@ from sr_indie_rnn.utils import cheb_fft, bandlimited_harmonic_signal, get_harmon
 # SETTINGS
 filenames = ['MesaMiniRec_HighGain_DirectOut.json']
 base_path = '../../../Proteus_Tone_Packs/Selection'
-methods = ['naive', 'lagrange']
+methods = ['naive', 'stn', 'lidl', 'apdl', 'cidl', 'lagrange']
 os_factors = np.array([48/44.1], dtype=np.double)
 dur_seconds = 1.0
 start_seconds = 0.0

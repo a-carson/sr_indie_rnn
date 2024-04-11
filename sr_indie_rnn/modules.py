@@ -366,5 +366,3 @@ def get_SRIndieRNN(base_model: AudioRNN, method: str):
         model.rec = LagrangeInterp_RNN(cell=cell)
 
     return model
-
-
