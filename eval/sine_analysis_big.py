@@ -1,160 +1,103 @@
-from sr_indie_rnn.modules import convert_to_sr_indie
+import time
+from sr_indie_rnn.modules import get_SRIndieRNN, get_AudioRNN_from_json
 import torch
 import matplotlib.pyplot as plt
 import numpy as np
-from scipy.signal import windows
-from utils import model_from_json
-import librosa
 import os
+import math
+from sr_indie_rnn.utils import cheb_fft, bandlimited_harmonic_signal, get_harmonics, snr_dB
 
 #mpl.use("macosx")
 
-def my_fft(x, N=None):
-    N_win = x.shape[-1]
-    win = windows.chebwin(N_win, at=-120, sym=False)
-    if N is None:
-        N = N_win
-    return np.fft.fft(x * win, n=N)
-
-def get_harmonics(Y, f0, Fs):
-    L = len(Y)
-    fax = Fs * np.arange(0, len(Y)) / len(Y)
-    harmonic_freqs = fax[f0: L//2: f0]
-    harmonic_amps = np.abs(Y[f0: L//2: f0])
-    harmonic_phase = np.angle(Y[f0: L//2: f0])
-    dc_bin = np.real(Y[0])
-    return harmonic_freqs, harmonic_amps, harmonic_phase, dc_bin
-
-def bandlimited_harmonic_signal(freqs, amps, phase, DC_amp, t_ax, Fs):
-
-    fourier_synth = DC_amp + 2 * torch.sum(
-        torch.Tensor(amps).view(-1, 1) * torch.cos(
-            2 * torch.pi * torch.Tensor(t_ax) * torch.Tensor(freqs).view(-1, 1) + torch.Tensor(phase).view(
-                -1, 1)
-        ), dim=0)
-
-    fourier_synth *= 2 / Fs
-
-    return fourier_synth.numpy()
-
-def get_a_weighted_signal_and_bl(x, f0, Fs):
-    L = len(x)
-    time = torch.arange(0, L) / Fs
-    f_ax = np.arange(0, L) / L * Fs
-    a_weight = 10 ** (librosa.A_weighting(f_ax) / 10)
-
-
-    X = my_fft(x)
-    DC = np.real(X[0])
-
-    freqs = f_ax[f0: L//2: f0]
-    amps = np.abs(X[f0: L//2: f0])
-    phases = np.angle(X[f0: L//2: f0])
-
-    x_bl = DC + 2 * torch.sum(
-        torch.from_numpy(amps).view(-1, 1) * torch.cos(
-            2 * torch.pi * time * torch.from_numpy(freqs).view(-1, 1) + torch.from_numpy(phases).view(
-                -1, 1)
-        ), dim=0)
-
-    x_bl *= 2 / Fs
-    x_bl = x_bl.numpy()
-
-    X_bl = my_fft(x_bl)
-    X_bl *= np.abs(X[f0]) / np.abs(X_bl[f0])
-
-    x_a_weight = np.real(np.fft.ifft(X * a_weight))
-    x_bl_a_weight = np.real(np.fft.ifft(X_bl * a_weight))
-
-    return x_a_weight, x_bl_a_weight
-
-
+# SETTINGS
 filenames = ['MesaMiniRec_HighGain_DirectOut.json']
 base_path = '../../../Proteus_Tone_Packs/Selection'
-os_factors = [1, 48/44.1, 2, 96/44.1, 4, 196/44.1]
-
-# SETTINGS
-methods = ['lagrange']
+methods = ['naive', 'lagrange']
+os_factors = np.array([48/44.1], dtype=np.double)
 dur_seconds = 1.0
 start_seconds = 0.0
-sample_rate_base = 44100
+sr_base = 44100
 gain = 0.1
+dtype = torch.double
+midi = torch.arange(21, 109, dtype=dtype)
 
-midi = np.arange(21, 109)
-f0_freqs = np.floor(440 * 2 ** ((midi - 69) / 12))
-
+# init
+f0_freqs = torch.floor(440 * 2 ** ((midi - 69) / 12))       # need int values
 snr_aliases = np.zeros((len(f0_freqs), len(methods), len(filenames), len(os_factors)))
 snr_harmonics = np.zeros((len(f0_freqs), len(methods), len(filenames), len(os_factors)))
 thd = np.zeros((len(f0_freqs), len(filenames)))
 
+start_time = time.time()
+
+# base time and input -------
+t_ax = torch.arange(0, math.ceil(sr_base * dur_seconds), dtype=dtype) / sr_base
+x = gain * torch.sin(2.0 * f0_freqs.view(-1, 1, 1) * torch.pi * t_ax.view(1, -1, 1))
+num_samples = math.ceil(sr_base * dur_seconds)
+
+
 for o, os_factor in enumerate(os_factors):
+
     print(os_factor)
+    # oversampled time and input ---------
+    sr = math.ceil(sr_base * os_factor)
+    num_samples_up = math.ceil(sr * dur_seconds)
+    t_ax_up = torch.arange(0, num_samples_up) / sr
+    x_up = gain * torch.sin(2.0 * f0_freqs.view(-1, 1, 1) * torch.pi * t_ax_up.view(1, -1, 1))
 
     for f, filename in enumerate(filenames):
         print(filename)
-        model = model_from_json.RNN_from_state_dict(os.path.join(base_path, filename))
+        # process baseline output --------------------------
+        base_model = get_AudioRNN_from_json(os.path.join(base_path, filename))
+        base_model.double()
+        base_model.reset_state()
+        base_model.eval()
+        with torch.no_grad():
+            y_base, _ = base_model.forward(x)
+            y_base = y_base[:, :, 0].detach()
+            Y_base = cheb_fft(y_base)
 
         for m, method in enumerate(methods):
-            model = convert_to_sr_indie(model=model, method=method)
 
+            # process modified model output ------------------
+            model = get_SRIndieRNN(base_model=base_model, method=method)
             model.eval()
+            model.double()
+            model.reset_state()
             with torch.no_grad():
 
-
-
-                L = int(np.ceil(sample_rate_base * dur_seconds))
-                t_ax = np.arange(0, L) / sample_rate_base
-                x = gain * torch.sin(2.0 * torch.Tensor(f0_freqs).view(-1, 1, 1) * torch.pi * torch.Tensor(t_ax).view(1, -1, 1))
-                model.reset_state()
-                model.rec.os_factor = 1
-                y_base, _ = model.forward(x)
-                y_base = y_base[:, :, 0].detach().numpy()
-                Y_base = my_fft(y_base)
-                #plt.figure(), plt.plot(10 * np.log10(np.abs(Y_base[0, :]))), plt.show()
-                f_ax_base = np.arange(0, L) / L * sample_rate_base
-                a_weight_base = 10 ** (librosa.A_weighting(f_ax_base) / 10)
-
-                sample_rate = np.round(sample_rate_base * os_factor)
-
-                L_up = int(np.ceil(sample_rate * dur_seconds))
-                t_ax_up = np.arange(0, L_up) / sample_rate
-                x = gain * torch.sin(2.0 * torch.Tensor(f0_freqs).view(-1, 1, 1) * torch.pi * torch.Tensor(t_ax_up).view(1, -1, 1))
                 model.reset_state()
                 model.rec.os_factor = os_factor
-                y, _ = model.forward(x)
-                y = y[:, :, 0].detach().numpy()
-
-                Y = my_fft(y)
-                f_ax_up = np.arange(0, L_up) / L_up * sample_rate
-                a_weight_up = 10 ** (librosa.A_weighting(f_ax_up) / 10)
+                y, _ = model.forward(x_up)
+                y = y[:, :, 0].detach()
+                Y = cheb_fft(y)
 
                 for i, f0 in enumerate(f0_freqs):
                     f0 = int(f0)
-                    freqs, amps, phase, DC = get_harmonics(Y[i, ...], f0, sample_rate)
-                    freqs_base, amps_base, phase_base, DC_base = get_harmonics(Y_base[i, ...], f0, sample_rate_base)
-                    y_base_bl = bandlimited_harmonic_signal(freqs_base, amps_base, phase_base, DC_base, t_ax, sample_rate_base)
 
-                    M = len(freqs_base)
-                    y_down_bl = bandlimited_harmonic_signal(freqs[:M], amps[:M], phase[:M], DC, t_ax, sample_rate)
+                    # baseline bl harmonic sig
+                    freqs_base, amps_base, phase_base, dc_base = get_harmonics(Y_base[i, ...], f0, sr_base)
+                    y_base_bl = bandlimited_harmonic_signal(freqs_base, amps_base, phase_base, dc_base, t_ax, sr_base)
 
-                    # NEW -- aliasing
-                    Y_bl = np.abs(my_fft(y_down_bl))
-                    Y_bl *= np.abs(Y[i, f0]) / np.abs(Y_bl[f0])
-                    aliases = Y_bl[:L//2] - np.abs(Y[i, :L//2])
-                    Y_bl = Y_bl[:L//2]
+                    # model bl harmonic sig
+                    freqs, amps, phase, dc = get_harmonics(Y[i, ...], f0, sr)
+                    num_harmonics = len(freqs_base)
+                    y_bl = bandlimited_harmonic_signal(freqs[:num_harmonics],
+                                                       amps[:num_harmonics],
+                                                       phase[:num_harmonics],
+                                                        dc, t_ax, sr)
 
-                    snr = 10 * np.log10(
-                        np.sum(Y_bl ** 2) / (np.sum(aliases ** 2))
-                    )
-                    #print(snr)
+                    # adjust to ensure equal first harmonic amps
+                    Y_bl = cheb_fft(y_bl)
+                    Y_bl *= Y[i, f0].abs() / Y_bl[f0].abs()
 
-                    esr = 10 * np.log10(
-                        np.sum(y_base_bl ** 2) / (np.sum((y_down_bl - y_base_bl) ** 2))
-                    )
-                    snr_aliases[i, m, f, o] = snr
-                    snr_harmonics[i, m, f, o] = esr
-                    thd[i, f] = np.sqrt(np.sum(amps_base[1:]**2)) / amps_base[0]
+                    # compute SNRs
+                    snra = snr_dB(sig=Y_bl[:num_samples//2].abs(),
+                                  noise=Y_bl[:num_samples//2].abs() - Y[i, :num_samples//2].abs())
+                    snr_aliases[i, m, f, o] = snra.numpy()
 
+                    snrh = snr_dB(sig=y_base_bl,
+                                  noise=y_bl - y_base_bl)
+                    snr_harmonics[i, m, f, o] = snrh.numpy()
 
 
     plt.figure(figsize=[10, 5])
@@ -164,11 +107,11 @@ for o, os_factor in enumerate(os_factors):
     plt.legend(methods)
 
     plt.figure(figsize=[10, 5])
-    plt.semilogx(f0_freqs, np.mean(snr_harmonics[..., o], axis=-1), marker='+')
+    plt.semilogx(f0_freqs.numpy(), np.mean(snr_harmonics[..., o], axis=-1), marker='+')
     plt.title('OS = {}'.format(os_factor))
     plt.xlabel('f0 [Hz]'), plt.ylabel('SNHR [dB]')
     plt.legend(methods)
     plt.show()
-
+print("elapsed time: ", time.time() - start_time)
 #np.save('snr_aliases_mesamini.npy', snr_aliases)
 #np.save('snr_harmonics_mesamini.npy', snr_harmonics)
