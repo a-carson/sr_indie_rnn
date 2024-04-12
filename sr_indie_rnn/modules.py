@@ -138,8 +138,13 @@ class LIDL_RNN(torch.nn.Module):
         num_samples = x.shape[1]
 
         # lin. interp setup
-        delay_near = math.floor(self.os_factor)
-        delay_far = math.ceil(self.os_factor)
+        if self.os_factor >= 2:
+            delay_near = math.floor(self.os_factor)
+            delay_far = math.ceil(self.os_factor)
+        else:
+            delay_near = 1
+            delay_far = 2
+
         alpha = self.os_factor - delay_near
 
         if h is None:
@@ -243,8 +248,7 @@ class LagrangeInterp_RNN(torch.nn.Module):
             epsilon = math.floor(self.os_factor) - 1
         else:
             delta = self.os_factor - 1
-            epsilon = math.floor(self.os_factor)
-
+            epsilon = 1
         kernel = x.new_ones(self.order+1)
         for n in range(self.order+1):
             for k in range(self.order+1):
