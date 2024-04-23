@@ -6,12 +6,15 @@ import torch
 import numpy as np
 from torch import Tensor as T
 from typing import List, Callable
+from diode_clipper import DiodeClipperCell, DiodeClipper
 
 
-def vector_to_tuple(x: T) -> tuple[T, T]:
+def vector_to_tuple(x: T):
     num_states = x.shape[-1]
-    assert ((num_states % 2) == 0)
-    return x[..., :num_states // 2], x[..., num_states // 2:]
+    if (num_states % 2) == 0:
+        return x[..., :num_states // 2], x[..., num_states // 2:]
+    else:
+        return x
 
 def tuple_to_vector(t: tuple[T, T]) -> T:
     return torch.cat(t, dim=-1)
@@ -368,5 +371,23 @@ def get_SRIndieRNN(base_model: AudioRNN, method: str):
         model.rec = CIDL_RNN(cell=cell)
     elif method == 'lagrange':
         model.rec = LagrangeInterp_RNN(cell=cell)
+
+    return model
+
+
+def get_SRIndieDiodeClipper(base_model: DiodeClipper, method: str):
+    model = copy.deepcopy(base_model)
+    cell = copy.deepcopy(model.rec.cell)
+
+    if method == 'lidl':
+        model.rec = LIDL_RNN(cell=cell)
+    elif method == 'apdl':
+        model.rec = APDL_RNN(cell=cell)
+    elif method == 'stn':
+        model.rec = STN_RNN(cell=cell)
+    elif method == 'cidl':
+        model.rec = LagrangeInterp_RNN(cell=cell, order=3)
+    elif method == 'lagrange_5':
+        model.rec = LagrangeInterp_RNN(cell=cell, order=5)
 
     return model
