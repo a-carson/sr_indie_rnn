@@ -18,6 +18,16 @@ def get_harmonics(complex_spec: T, f0: int, sr: int):
     dc_amp = torch.real(complex_spec[0])
     return freqs, amps, phase, dc_amp
 
+def get_odd_harmonics(complex_spec: T, f0: int, sr: int):
+    L = complex_spec.shape[0]
+    fax = sr * torch.arange(0, L) / L
+    spec_slice = slice(f0, L//2, 2*f0)
+    freqs = fax[spec_slice]
+    amps = complex_spec[spec_slice].abs()
+    phase = complex_spec[spec_slice].angle()
+    dc_amp = torch.real(complex_spec[0])
+    return freqs, amps, phase, dc_amp
+
 
 def bandlimited_harmonic_signal(freqs: T, amps: T, phase: T, dc_amp: T, t_ax: T, sr: int) -> T:
 

@@ -2,10 +2,9 @@ import copy
 import time
 from sr_indie_rnn.modules import get_SRIndieDiodeClipper
 import torch
-import matplotlib.pyplot as plt
 import numpy as np
 import math
-from sr_indie_rnn.utils import cheb_fft, bandlimited_harmonic_signal, get_harmonics, snr_dB
+from sr_indie_rnn.utils import cheb_fft, bandlimited_harmonic_signal, get_odd_harmonics, snr_dB
 from diode_clipper import DiodeClipper
 from argparse import ArgumentParser, BooleanOptionalAction
 import wandb
@@ -18,6 +17,7 @@ parser.add_argument('--project', type=str, default='sr_indie_diode_clipper')
 parser.add_argument('-m', '--methods', nargs='+', default=['naive', 'stn', 'lidl', 'apdl', 'cidl', 'lagrange_5', 'exact'])
 parser.add_argument('--midi_min', type=int, default=21)
 parser.add_argument('--midi_max', type=int, default=109)
+parser.add_argument('--lut_path', type=str, default='diode_clipper_LUT_44.1kHz.npy')
 
 
 
@@ -25,6 +25,10 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
     methods = args.methods
+    if args.lut_path == '':
+        lut_path = None
+    else:
+        lut_path = args.lut_path
 
     dur_seconds = 1.0
     sr_base = args.sr_base
@@ -66,7 +70,7 @@ if __name__ == '__main__':
         x_up = gain * torch.sin(2.0 * f0_freqs.view(-1, 1, 1) * torch.pi * t_ax_up.view(1, -1, 1))
 
         # process baseline output --------------------------
-        base_model = DiodeClipper(sample_rate=sr_base)
+        base_model = DiodeClipper(sample_rate=sr_base, lut_path=lut_path)
         base_model.double()
         base_model.eval()
 
@@ -79,7 +83,7 @@ if __name__ == '__main__':
 
             # process modified model output ------------------
             if method == 'exact':
-                model = DiodeClipper(sample_rate=sr)
+                model = DiodeClipper(sample_rate=sr, lut_path=lut_path)
             elif method == 'naive':
                 model = copy.deepcopy(base_model)
             else:
@@ -102,11 +106,11 @@ if __name__ == '__main__':
                     Y = cheb_fft(y)
 
                 # baseline bl harmonic sig
-                freqs_base, amps_base, phase_base, dc_base = get_harmonics(Y_base, f0, sr_base)
+                freqs_base, amps_base, phase_base, dc_base = get_odd_harmonics(Y_base, f0, sr_base)
                 y_base_bl = bandlimited_harmonic_signal(freqs_base, amps_base, phase_base, dc_base, t_ax, sr_base)
 
                 # model bl harmonic sig
-                freqs, amps, phase, dc = get_harmonics(Y, f0, sr)
+                freqs, amps, phase, dc = get_odd_harmonics(Y, f0, sr)
                 num_harmonics = len(freqs_base)
                 mask = (freqs < sr_base / 2).int()
                 y_bl = bandlimited_harmonic_signal(freqs * mask,
