@@ -1,6 +1,7 @@
 import torch
 import numpy as np
 import math
+import warnings
 
 class DiodeClipperFull(torch.nn.Module):
     def __init__(self, sample_rate, r=1e3, c=33e-9, i_s=2.52e-9, v_t=25.83e-3, n_i=1.752,
@@ -142,14 +143,14 @@ class DiodeClipperCell(torch.nn.RNNCellBase):
         return h.clone()
 
 class DiodeClipperLUT(DiodeClipperCell):
-    def __init__(self, sample_rate, lut_path, r=1e3, c=33e-9, i_s=2.52e-9, v_t=25.83e-3):
+    def __init__(self, sample_rate, lut_path, interp_order=3, r=1e3, c=33e-9, i_s=2.52e-9, v_t=25.83e-3):
         super().__init__(sample_rate, r, c, i_s, v_t)
         lut = torch.from_numpy(np.load(lut_path))
         self.p_ax = lut[:, 0]
         self.x_ax = lut[:, 1]
         self.length = self.x_ax.shape[0]
         self.delta_p = self.p_ax[1] - self.p_ax[0]
-        self.order = 5
+        self.order = interp_order
 
         idx = torch.arange(self.order + 1, dtype=torch.double)
         self.n_idx = idx.view(-1, 1).repeat(1, self.order)
@@ -164,13 +165,26 @@ class DiodeClipperLUT(DiodeClipperCell):
 
         x_now = x_now.clone() * self.omega
         f = self.nonlinear_func(h)
+
+        if not torch.isfinite(f):
+            warnings.warn('Warning: unstable')
+            return h
+
         p = self.k / 2 * f - self.k * x_now - h.clone()
 
-        ind_bet = (p - self.p_ax[0]) / self.delta_p + 1
-        nn_left = math.floor(ind_bet)
-        delta = (ind_bet - nn_left + (self.order+1)//2 - 1).squeeze()
+        frac_idx = (p - self.p_ax[0]).squeeze() / self.delta_p
+        min_idx = math.floor(frac_idx)-(self.order+1)//2+1
+        max_idx = math.floor(frac_idx)+(self.order+1)//2+1
 
+        if min_idx < 0:
+            warnings.warn('Warning: out of LUT bounds')
+            return self.x_ax[0]
+        elif max_idx >= self.x_ax.shape[0]:
+            warnings.warn('Warning: out of LUT bounds')
+            return self.x_ax[-1]
+
+        delta = frac_idx - min_idx
         kernel = torch.prod((delta - self.k_idx) / (self.n_idx - self.k_idx), dim=1)
-        x = self.x_ax[nn_left-(self.order+1)//2:nn_left+(self.order+1)//2] @ kernel
+        x = self.x_ax[min_idx:max_idx] @ kernel
         return x
 
