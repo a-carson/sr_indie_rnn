@@ -135,8 +135,8 @@ if __name__ == '__main__':
                     run.log({"snra_os={}".format(os_factor): snra.numpy(),
                                "snra_h={}".format(os_factor): snrh.numpy(),
                                "f0": f0})
-
-            run.finish()
+            if args.wandb:
+                run.finish()
 
 
 
