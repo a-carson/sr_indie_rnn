@@ -143,7 +143,7 @@ class DiodeClipperCell(torch.nn.RNNCellBase):
         return h.clone()
 
 class DiodeClipperLUT(DiodeClipperCell):
-    def __init__(self, sample_rate, lut_path, interp_order=3, r=1e3, c=33e-9, i_s=2.52e-9, v_t=25.83e-3):
+    def __init__(self, sample_rate, lut_path, interp_order=5, r=1e3, c=33e-9, i_s=2.52e-9, v_t=25.83e-3):
         super().__init__(sample_rate, r, c, i_s, v_t)
         lut = torch.from_numpy(np.load(lut_path))
         self.p_ax = lut[:, 0]
