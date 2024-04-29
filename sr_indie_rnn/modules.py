@@ -7,6 +7,7 @@ import numpy as np
 from torch import Tensor as T
 from typing import List, Callable
 from diode_clipper import DiodeClipperCell, DiodeClipper
+import pandas
 
 
 def vector_to_tuple(x: T):
@@ -92,11 +93,12 @@ class STN_RNN(torch.nn.Module):
             self.cell_forward = rnn_cell_forward
             self.state_size = self.hidden_size
 
+        self.k = 1 / os_factor
+
     def forward(self, x, h=None):
 
         batch_size = x.shape[0]
         num_samples = x.shape[1]
-        k = 1/self.os_factor
 
 
         if h is None:
@@ -108,7 +110,7 @@ class STN_RNN(torch.nn.Module):
 
             xi = x[:, i, :]
             nl = self.nonlinearity(xi, h)
-            h = h + k * nl
+            h = h + self.k * nl
 
             states[:, i, :] = h
 
@@ -224,9 +226,7 @@ class CIDL_RNN(torch.nn.Module):
         return states[..., :self.hidden_size], vector_to_tuple(states)
 
 class LagrangeInterp_RNN(torch.nn.Module):
-    def __init__(self, cell: torch.nn.RNNCellBase,
-                             os_factor=1.0,
-                             order=3):
+    def __init__(self, cell: torch.nn.RNNCellBase, order: int, os_factor=1.0):
         super().__init__()
         self.os_factor = os_factor
         self.order = order
@@ -240,45 +240,55 @@ class LagrangeInterp_RNN(torch.nn.Module):
             self.cell_forward = rnn_cell_forward
             self.state_size = self.hidden_size
 
+        # lagrange interp setup
+        if self.os_factor >= 2:
+            self.delta = self.os_factor - math.floor(self.os_factor) + 1
+            self.epsilon = math.floor(self.os_factor) - 1
+        else:
+            self.delta = self.os_factor - 1
+            self.epsilon = 1
+        self.kernel = torch.ones(self.order+1, dtype=torch.double)
+        for n in range(self.order+1):
+            for k in range(self.order+1):
+                if k != n:
+                    self.kernel[n] *= (self.delta - k) / (n - k)
+
     def forward(self, x, h=None):
 
         batch_size = x.shape[0]
         num_samples = x.shape[1]
-
-        # lagrange interp setup
-        if self.os_factor >= 2:
-            delta = self.os_factor - math.floor(self.os_factor) + 1
-            epsilon = math.floor(self.os_factor) - 1
-        else:
-            delta = self.os_factor - 1
-            epsilon = 1
-        kernel = x.new_ones(self.order+1)
-        for n in range(self.order+1):
-            for k in range(self.order+1):
-                if k != n:
-                    kernel[n] *= (delta - k) / (n - k)
 
         if h is None:
             states = x.new_zeros(batch_size, num_samples, self.state_size, device=x.device)
             prev_states = x.new_zeros(batch_size, self.order+1, self.state_size, device=x.device)
         else:
             states = tuple_to_vector(h)
-            prev_states = states[:, -3:, :]
+            prev_states = states[:, -self.order:, :]
 
         for i in range(x.shape[1]):
-            h_read = kernel @ prev_states
+            h_read = self.kernel @ prev_states
             xi = x[:, i, :]
             h = self.cell_forward(self.cell.forward, xi, h_read)
             states[:, i, :] = h
-            prev_states[:, -1, :] = states[:, i - epsilon + 1, :].detach()
+            prev_states[:, -1, :] = states[:, i - self.epsilon + 1, :].detach()
             prev_states = torch.roll(prev_states, dims=1, shifts=1)
 
         return states[..., :self.hidden_size], h
 
+class OptimalFIRInterp_RNN(LagrangeInterp_RNN):
+
+    def __init__(self, cell: torch.nn.RNNCellBase, order: int, os_factor=1.0):
+        super().__init__(cell, order, os_factor)
+        # TODO: make this not hard coded
+        if os_factor > 1:
+            data = pandas.read_csv('44.1k_to_48k_fir_coeffs.csv', header=None).values
+        else:
+            data = pandas.read_csv('48k_to_44.1k_fir_coeffs.csv', header=None).values
+
+        self.kernel = torch.from_numpy(data[order-1, :order+1])
 
 class APDL_RNN(torch.nn.Module):
-    def __init__(self, cell: torch.nn.RNNCellBase,
-                 os_factor=1.0):
+    def __init__(self, cell: torch.nn.RNNCellBase, os_factor=1.0):
         super().__init__()
         self.os_factor = os_factor
         self.cell = cell
@@ -291,15 +301,15 @@ class APDL_RNN(torch.nn.Module):
             self.cell_forward = rnn_cell_forward
             self.state_size = self.hidden_size
 
+        self.delay_near = math.floor(self.os_factor)
+        self.delay_far = math.floor(self.os_factor) + 1
+        alpha = torch.DoubleTensor([self.os_factor - self.delay_near])
+        self.allpass_coeff = (1 - alpha) / (1 + alpha)
+
     def forward(self, x, h=None):
 
         batch_size = x.shape[0]
         num_samples = x.shape[1]
-
-        delay_near = math.floor(self.os_factor)
-        delay_far = math.floor(self.os_factor) + 1
-        alpha = self.os_factor - delay_near
-        allpass_coeff = (1 - alpha) / (1 + alpha)
 
         states = x.new_zeros(batch_size, num_samples, self.state_size)
         ap_state = x.new_zeros(batch_size, self.state_size)
@@ -310,7 +320,7 @@ class APDL_RNN(torch.nn.Module):
             ap_state = h[2]
 
         for i in range(x.shape[1]):
-            ap_state = allpass_coeff * (states[:, i - delay_near, :] - ap_state) + states[:, i - delay_far, :]
+            ap_state = self.allpass_coeff * (states[:, i - self.delay_near, :] - ap_state) + states[:, i - self.delay_far, :]
             xi = x[:, i, :]
             h_write = self.cell_forward(self.cell.forward, xi, ap_state)
             states[:, i, :] = h_write
@@ -375,7 +385,7 @@ def get_SRIndieRNN(base_model: AudioRNN, method: str):
     return model
 
 
-def get_SRIndieDiodeClipper(base_model: DiodeClipper, method: str):
+def get_SRIndieDiodeClipper(base_model: DiodeClipper, method: str, os_factor):
     model = copy.deepcopy(base_model)
     cell = copy.deepcopy(model.rec.cell)
 
@@ -386,8 +396,8 @@ def get_SRIndieDiodeClipper(base_model: DiodeClipper, method: str):
     elif method == 'stn':
         model.rec = STN_RNN(cell=cell)
     elif method == 'cidl':
-        model.rec = LagrangeInterp_RNN(cell=cell, order=3)
+        model.rec = LagrangeInterp_RNN(cell=cell, order=1, os_factor=os_factor)
     elif method == 'lagrange_5':
-        model.rec = LagrangeInterp_RNN(cell=cell, order=5)
+        model.rec = LagrangeInterp_RNN(cell=cell, order=5, os_factor=os_factor)
 
     return model

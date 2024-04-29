@@ -1,6 +1,6 @@
 import copy
 import time
-from sr_indie_rnn.modules import get_SRIndieDiodeClipper
+from sr_indie_rnn.modules import get_SRIndieDiodeClipper, LagrangeInterp_RNN, OptimalFIRInterp_RNN, APDL_RNN, STN_RNN
 import torch
 import numpy as np
 import math
@@ -15,7 +15,8 @@ parser.add_argument("--sr_run", type=int, default=48000)
 parser.add_argument("--gain", type=float, default=1.0)
 parser.add_argument("--wandb", action=BooleanOptionalAction)
 parser.add_argument('--project', type=str, default='sr_indie_diode_clipper')
-parser.add_argument('-m', '--methods', nargs='+', default=['naive', 'stn', 'lidl', 'apdl', 'cidl', 'lagrange_5', 'exact'])
+parser.add_argument('-m', '--methods', nargs='+', default=['lagrange', 'opto'])
+parser.add_argument('--fir_order', type=int, default=3)
 parser.add_argument('--midi_min', type=int, default=21)
 parser.add_argument('--midi_max', type=int, default=109)
 parser.add_argument('--lut_path', type=str, default='diode_clipper_LUT_44.1kHz.npy')
@@ -35,6 +36,7 @@ if __name__ == '__main__':
     sr_base = args.sr_base
     sr = args.sr_run
     os_factor = np.double(sr) / np.double(sr_base)
+    order = args.fir_order
 
     gain = args.gain
     dtype = torch.double
@@ -57,7 +59,7 @@ if __name__ == '__main__':
     # oversampled time and input ---------
     sr = math.ceil(sr_base * os_factor)
     num_samples_up = math.ceil(sr * dur_seconds)
-    t_ax_up = torch.arange(0, num_samples_up) / sr
+    t_ax_up = torch.arange(0, num_samples_up, dtype=dtype) / sr
     x_up = gain * torch.sin(2.0 * f0_freqs.view(-1, 1, 1) * torch.pi * t_ax_up.view(1, -1, 1))
 
     # process baseline output --------------------------
@@ -70,15 +72,21 @@ if __name__ == '__main__':
         if args.wandb:
             run = wandb.init(project=args.project,
                        group='sr_base={}'.format(sr_base),
-                       name=method)
+                       name='{}_{}'.format(method, order))
 
         # process modified model output ------------------
-        if method == 'exact':
-            model = DiodeClipper(sample_rate=sr, lut_path=lut_path)
-        elif method == 'naive':
-            model = copy.deepcopy(base_model)
+        model = copy.deepcopy(base_model)
+        if method == 'lagrange':
+            model.rec = LagrangeInterp_RNN(cell=base_model.rec.cell, order=order, os_factor=os_factor)
+        elif method == 'opto':
+            model.rec = OptimalFIRInterp_RNN(cell=base_model.rec.cell, order=order, os_factor=os_factor)
+        elif method == 'apdl':
+            model.rec = APDL_RNN(cell=base_model.rec.cell, os_factor=os_factor)
+        elif method == 'stn':
+            model.rec = STN_RNN(cell=base_model.rec.cell, os_factor=os_factor)
         else:
-            model = get_SRIndieDiodeClipper(base_model=base_model, method=method)
+            print('Naive method')
+        print(model)
         model.eval()
         model.double()
         model.rec.os_factor = os_factor
@@ -123,8 +131,8 @@ if __name__ == '__main__':
             snr_harmonics[i, m] = snrh.numpy()
 
             if args.wandb:
-                run.log({"snra_os={}".format(os_factor): snra.numpy(),
-                           "snra_h={}".format(os_factor): snrh.numpy(),
+                run.log({"SNRAliasing_os={}".format(os_factor): snra.numpy(),
+                           "SNRHarmonics_os={}".format(os_factor): snrh.numpy(),
                            "f0": f0})
         if args.wandb:
             run.finish()
