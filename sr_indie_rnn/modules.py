@@ -277,13 +277,19 @@ class LagrangeInterp_RNN(torch.nn.Module):
 
 class OptimalFIRInterp_RNN(LagrangeInterp_RNN):
 
-    def __init__(self, cell: torch.nn.RNNCellBase, order: int, os_factor=1.0):
+    def __init__(self, cell: torch.nn.RNNCellBase, order: int, os_factor=1.0, dc_flat=False):
         super().__init__(cell, order, os_factor)
         # TODO: make this not hard coded
         if os_factor > 1:
-            data = pandas.read_csv('44.1k_to_48k_fir_coeffs.csv', header=None).values
+            if dc_flat:
+                data = pandas.read_csv('44.1k_to_48k_fir_coeffs_DC.csv', header=None).values
+            else:
+                data = pandas.read_csv('44.1k_to_48k_fir_coeffs.csv', header=None).values
         else:
-            data = pandas.read_csv('48k_to_44.1k_fir_coeffs.csv', header=None).values
+            if dc_flat:
+                data = pandas.read_csv('48k_to_44.1k_fir_coeffs_DC.csv', header=None).values
+            else:
+                data = pandas.read_csv('48k_to_44.1k_fir_coeffs.csv', header=None).values
 
         self.kernel = torch.from_numpy(data[order-1, :order+1])
 
@@ -401,3 +407,25 @@ def get_SRIndieDiodeClipper(base_model: DiodeClipper, method: str, os_factor):
         model.rec = LagrangeInterp_RNN(cell=cell, order=5, os_factor=os_factor)
 
     return model
+
+
+def get_cell_from_rnn(rnn: torch.nn.Module) -> torch.nn.RNNCellBase:
+
+    if type(rnn) == torch.nn.LSTM:
+        cell = torch.nn.LSTMCell(hidden_size=rnn.hidden_size,
+                                 input_size=rnn.input_size,
+                                 bias=rnn.bias)
+    elif type(rnn.rec) == torch.nn.GRU:
+        cell = torch.nn.GRUCell(hidden_size=rnn.hidden_size,
+                                input_size=rnn.input_size,
+                                bias=rnn.bias)
+    else:
+        cell = torch.nn.RNNCell(hidden_size=rnn.hidden_size,
+                                input_size=rnn.input_size,
+                                bias=rnn.bias)
+    cell.weight_hh = rnn.weight_hh_l0
+    cell.weight_ih = rnn.weight_ih_l0
+    cell.bias_hh = rnn.bias_hh_l0
+    cell.bias_ih = rnn.bias_ih_l0
+
+    return cell
