@@ -11,9 +11,20 @@ def cheb_fft(x: T) -> T:
 def get_harmonics(complex_spec: T, f0: int, sr: int):
     L = complex_spec.shape[0]
     fax = sr * torch.arange(0, L) / L
-    freqs = fax[f0: L//2: f0]
-    amps = complex_spec[f0: L//2: f0].abs()
-    phase = complex_spec[f0: L//2: f0].angle()
+    spec_slice = slice(f0, L//2, f0)
+    freqs = fax[spec_slice]
+    amps = complex_spec[spec_slice].abs()
+    phase = complex_spec[spec_slice].angle()
+    dc_amp = torch.real(complex_spec[0])
+    return freqs, amps, phase, dc_amp
+
+def get_odd_harmonics(complex_spec: T, f0: int, sr: int):
+    L = complex_spec.shape[0]
+    fax = sr * torch.arange(0, L) / L
+    spec_slice = slice(f0, L//2, 2*f0)
+    freqs = fax[spec_slice]
+    amps = complex_spec[spec_slice].abs()
+    phase = complex_spec[spec_slice].angle()
     dc_amp = torch.real(complex_spec[0])
     return freqs, amps, phase, dc_amp
 

@@ -1,65 +1,46 @@
+import math
 import torch
+from torch import tensor as T
 
-def giant_fft_upsample(x, orig_freq, new_freq):
+'''
+Giant FFT resampling
 
-    N = x.shape[-1]
-    X = torch.fft.fft(x)
-    N_up = new_freq * N // orig_freq
-    X_up = torch.zeros((1, N_up), dtype=X.dtype)
+Based on method proposed in:
+Vesa Välimäki and Stefan Bilbao, "Giant FFTs for Sample-Rate Conversion" in Journal of the Audio Eng. Soc. (JAES), 2023
+https://www.aes.org/e-lib/browse.cfm?elib=22033
 
-    X_up[..., 0:N//2] = X[..., 0:N//2].clone()
-    X_up[..., N//2] = 0.5 * X[..., N//2].clone()
-    X_up[..., N_up - N//2] = 0.5 * X[..., N//2].clone()
-    X_up[..., N_up - N // 2 + 1:] = torch.conj(X_up[..., 1:N//2].clone()).flip(-1)
-    x_up = torch.fft.ifft(X_up)
-    return torch.real(x_up) * new_freq / orig_freq
+for best results x should be even-length
 
-def giant_fft_downsample(x, orig_freq, new_freq):
+'''
 
-    N = x.shape[-1]
-    X = torch.fft.fft(x)
-    N_down = new_freq * N // orig_freq
-    X_down = torch.zeros((1, N_down), dtype=X.dtype)
 
-    X_down[..., 0:N_down//2] = X[..., 0:N_down//2].clone()
-    X_down[..., N_down//2] = 0.0
-    X_down[..., N_down // 2 + 1:] = torch.conj(X_down[..., 1:N_down//2].clone()).flip(-1)
-    x_down = torch.fft.ifft(X_down)
-    return torch.real(x_down) * new_freq / orig_freq
+def giant_fft_resample(x: T, orig_freq: int, new_freq: int):
 
-# p = 160
-# q = 147
-# Fs = 44100
-# f0 = 10e3
-# Fs_up = Fs * p // q
-# # t_ax = np.arange(0, Fs) / Fs
-# # t_ax_up = np.arange(0, Fs_up) / Fs_up
-# #
-# # y = np.sin(2 * np.pi * f0 * t_ax)
-# # y_up_target = np.sin(2 * np.pi * f0 * t_ax_up)
-# # y_up = giant_fft_upsample(y, p, q)
-# #
-# # plt.plot(y_up_target)
-# # plt.plot(y_up)
-# # plt.show()
-# # esr = np.sum((y_up - y_up_target) ** 2) / np.sum(y_up_target**2)
-#
-#
-# x, sample_rate = torchaudio.load('../../../audio_datasets/dist_fx_192k/44k/test/ht1-input.wav')
-# x = x[..., :-1].type(torch.DoubleTensor)
-#
-#
-# x_reaper, sample_rate = torchaudio.load('../../../audio_datasets/dist_fx_192k/48k/test/ht1-input.wav')
-# x_pt = torchaudio.functional.resample(x, orig_freq=q, new_freq=p)
-#
-# x_g = giant_fft_upsample_torch(x, p, q)
-# esr = torch.sum((x_pt - x_g) ** 2) / torch.sum(x_g**2)
-#
-# fvec = sample_rate * np.arange(0, x_g.shape[-1]) / x_g.shape[-1]
-# plt.plot(fvec, 10 * np.log10(np.abs(np.fft.fft(x_pt[0, ...].numpy()))))
-# plt.plot(fvec, 10 * np.log10(np.abs(np.fft.fft(x_reaper[0, :-1].numpy()))))
-# plt.plot(fvec, 10 * np.log10(np.abs(np.fft.fft(x_g[0, ...].numpy()))))
-#
-#
-#
-# print(esr)
+    # lengths
+    n_in = x.shape[-1]
+    m = 2 * math.ceil(n_in / 2 / orig_freq)  # fft zero-pad factor
+    n_fft_orig = m * orig_freq
+    n_fft_new = m * new_freq
+    n_out = math.ceil(new_freq / orig_freq * n_in)
+
+    # fft
+    x_fft_og = torch.fft.rfft(x, n_fft_orig)
+    x_fft_new = torch.zeros((1, n_fft_new // 2 + 1), dtype=x_fft_og.dtype, device=x_fft_og.device)
+
+    if new_freq > orig_freq:
+        # pad fft
+        x_fft_new[..., 0:n_fft_orig // 2] = x_fft_og[..., 0:n_fft_orig // 2].clone()
+        x_fft_new[..., n_fft_orig // 2] = 0.5 * x_fft_og[..., n_fft_orig // 2].clone()
+    else:
+        # truncate fft
+        x_fft_new[..., 0:n_fft_new // 2] = x_fft_og[..., 0:n_fft_new // 2].clone()
+
+    # ifft
+    x_new = torch.fft.irfft(x_fft_new)
+
+    # truncate and scale
+    return x_new[..., :n_out] * new_freq / orig_freq
+
+
+
+
