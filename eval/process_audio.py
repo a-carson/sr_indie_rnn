@@ -1,7 +1,7 @@
 import os
 import torch
 import torchaudio
-from sr_indie_rnn.giant_fft_resample import giant_fft_resample
+from utils.giant_fft_resample import giant_fft_resample
 import sr_indie_rnn.modules as rnn
 
 

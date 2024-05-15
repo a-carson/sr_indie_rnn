@@ -8,7 +8,7 @@ from utils import model_from_json
 import os
 import pathlib
 import numpy as np
-from sr_indie_rnn.giant_fft_resample import giant_fft_upsample
+from utils.giant_fft_resample import giant_fft_resample
 
 mpl.use("macosx")
 

@@ -6,7 +6,8 @@ import wandb
 import numpy as np
 import matplotlib.pyplot as plt
 import utils.loss_modules
-from utils import model_from_json
+import sr_indie_rnn.modules as srirnn
+import itertools
 
 
 class BaselineRNN(pl.LightningModule):
@@ -17,8 +18,7 @@ class BaselineRNN(pl.LightningModule):
                  tbptt_steps: int = 1024,
                  learning_rate: float = 5e-4,
                  use_wandb: bool = False,
-                 log_audio_every_n_epochs: int = 10,
-                 rnn_model_json: str = ''):
+                 log_audio_every_n_epochs: int = 10,):
 
         super().__init__()
         self.model = rnn_model
@@ -33,8 +33,6 @@ class BaselineRNN(pl.LightningModule):
 
         self.automatic_optimization = False
 
-        if rnn_model_json != '':
-            self.model = model_from_json.RNN_from_state_dict(rnn_model_json)
 
 
 
@@ -91,6 +89,8 @@ class BaselineRNN(pl.LightningModule):
 
         # SAVE AUDIO
         if self.current_epoch == 0:
+            if self.use_wandb:
+                wandb.log({'val_loss_og': loss.detach().numpy()})
             self.log_audio('Val_A_target', y[0, :, :])
             self.log_audio('Val_B_target', y[int(x.shape[0] / 2), :, :])
             self.log_audio('Val_C_target', y[-1, :, :])
@@ -119,6 +119,47 @@ class BaselineRNN(pl.LightningModule):
         if self.use_wandb:
             wandb.log({'Audio/' + caption: wandb.Audio(audio.cpu().detach(), caption=caption, sample_rate=self.sample_rate),
                       'epoch': self.current_epoch})
+
+class PretrainedRNN(BaselineRNN):
+    def __init__(self,
+                 rnn_model_json: str,
+                 loss_module: torch.nn.Module,
+                 sample_rate: int,
+                 tbptt_steps: int = 1024,
+                 learning_rate: float = 5e-4,
+                 use_wandb: bool = False,
+                 log_audio_every_n_epochs: int = 10):
+        super().__init__(rnn_model=srirnn.get_AudioRNN_from_json(rnn_model_json),
+                         loss_module=loss_module,
+                         sample_rate=sample_rate,
+                         tbptt_steps=tbptt_steps,
+                         learning_rate=learning_rate,
+                         use_wandb=use_wandb,
+                         log_audio_every_n_epochs=log_audio_every_n_epochs)
+
+class FIRInterpRNN(PretrainedRNN):
+    def __init__(self,
+                 order: int,
+                 rnn_model_json: str,
+                 loss_module: torch.nn.Module,
+                 sample_rate: int,
+                 base_sample_rate = None,
+                 tbptt_steps: int = 1024,
+                 learning_rate: float = 5e-4,
+                 use_wandb: bool = False,
+                 log_audio_every_n_epochs: int = 10):
+        super().__init__(rnn_model_json, loss_module, sample_rate, tbptt_steps, learning_rate, use_wandb, log_audio_every_n_epochs)
+        cell = srirnn.get_cell_from_rnn(self.model.rec)
+        if base_sample_rate is not None:
+            os_factor = np.double(sample_rate) / np.double(base_sample_rate)
+        else:
+            os_factor = 1
+        self.model.rec = srirnn.LagrangeInterp_RNN(cell=cell, order=order, os_factor=os_factor)
+        for p in itertools.chain(self.model.rec.cell.parameters(), self.model.linear.parameters()):
+            p.requires_grad = False
+
+        print(self.model)
+
 
 class SRIndieRNN(pl.LightningModule):
     def __init__(self,

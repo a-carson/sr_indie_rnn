@@ -2,7 +2,7 @@ import numpy as np
 import torch
 import torchaudio
 import os
-from sr_indie_rnn.giant_fft_resample import giant_fft_downsample
+from utils.giant_fft_resample import giant_fft_resample
 
 
 dir = '../audio/proteus'

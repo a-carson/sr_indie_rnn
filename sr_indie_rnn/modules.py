@@ -53,7 +53,8 @@ class AudioRNN(torch.nn.Module):
         if ndim == 2:
             x = x.unsqueeze(2)
 
-        states, last_state = self.rec(x)
+        states, last_state = self.rec(x, self.state)
+        self.state = last_state
         out = self.linear(states)
         if self.residual:
             out += x[..., 0].unsqueeze(-1)
@@ -62,6 +63,11 @@ class AudioRNN(torch.nn.Module):
             out = out.squeeze(2)
 
         return out, states
+
+    def forward_frames(self, x):
+        ndim = x.ndim
+        if ndim == 2:
+            x = x.unsqueeze(2)
 
     def reset_state(self):
         self.state = None
@@ -247,33 +253,32 @@ class LagrangeInterp_RNN(torch.nn.Module):
         else:
             self.delta = self.os_factor - 1
             self.epsilon = 1
-        self.kernel = torch.ones(self.order+1, dtype=torch.double)
+        kernel = torch.ones(self.order+1, dtype=torch.float)
         for n in range(self.order+1):
             for k in range(self.order+1):
                 if k != n:
-                    self.kernel[n] *= (self.delta - k) / (n - k)
+                    kernel[n] *= (self.delta - k) / (n - k)
+        self.kernel = torch.nn.Parameter(kernel)
 
     def forward(self, x, h=None):
 
         batch_size = x.shape[0]
         num_samples = x.shape[1]
 
-        if h is None:
-            states = x.new_zeros(batch_size, num_samples, self.state_size, device=x.device)
-            prev_states = x.new_zeros(batch_size, self.order+1, self.state_size, device=x.device)
-        else:
-            states = tuple_to_vector(h)
-            prev_states = states[:, -self.order:, :]
+        states = x.new_zeros(batch_size, num_samples, self.state_size, device=x.device)
+        prev_states = x.new_zeros(batch_size, self.order + 1, self.state_size, device=x.device)
+        if h is not None:
+            prev_states[:,0,:] = tuple_to_vector(h)
 
         for i in range(x.shape[1]):
             h_read = self.kernel @ prev_states
             xi = x[:, i, :]
             h = self.cell_forward(self.cell.forward, xi, h_read)
             states[:, i, :] = h
-            prev_states[:, -1, :] = states[:, i - self.epsilon + 1, :].detach()
+            prev_states[:, -1, :] = states[:, i - self.epsilon + 1, :]
             prev_states = torch.roll(prev_states, dims=1, shifts=1)
 
-        return states[..., :self.hidden_size], h
+        return states[..., :self.hidden_size], vector_to_tuple(h)
 
 class OptimalFIRInterp_RNN(LagrangeInterp_RNN):
 
@@ -386,7 +391,7 @@ def get_SRIndieRNN(base_model: AudioRNN, method: str):
     elif method == 'cidl':
         model.rec = CIDL_RNN(cell=cell)
     elif method == 'lagrange':
-        model.rec = LagrangeInterp_RNN(cell=cell)
+        model.rec = LagrangeInterp_RNN(cell=cell, order=3)
 
     return model
 

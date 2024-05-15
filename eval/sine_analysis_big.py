@@ -10,16 +10,16 @@ from sr_indie_rnn.utils import cheb_fft, bandlimited_harmonic_signal, get_harmon
 #mpl.use("macosx")
 
 # SETTINGS
-filenames = ['MesaMiniRec_HighGain_DirectOut.json']
-base_path = '../../../Proteus_Tone_Packs/Selection'
-methods = ['naive', 'stn', 'lidl', 'apdl', 'cidl', 'lagrange']
+filenames = ['6505Plus_Red_DirectOut.json']
+base_path = '../Proteus_Tone_Packs'
+methods = ['cidl']
 os_factors = np.array([48/44.1], dtype=np.double)
 dur_seconds = 1.0
 start_seconds = 0.0
 sr_base = 44100
 gain = 0.1
 dtype = torch.double
-midi = torch.arange(21, 109, dtype=dtype)
+midi = torch.arange(21, 22, dtype=dtype)
 
 # init
 f0_freqs = torch.floor(440 * 2 ** ((midi - 69) / 12))       # need int values
@@ -41,7 +41,7 @@ for o, os_factor in enumerate(os_factors):
     # oversampled time and input ---------
     sr = math.ceil(sr_base * os_factor)
     num_samples_up = math.ceil(sr * dur_seconds)
-    t_ax_up = torch.arange(0, num_samples_up) / sr
+    t_ax_up = torch.arange(0, num_samples_up, dtype=dtype) / sr
     x_up = gain * torch.sin(2.0 * f0_freqs.view(-1, 1, 1) * torch.pi * t_ax_up.view(1, -1, 1))
 
     for f, filename in enumerate(filenames):
@@ -81,9 +81,10 @@ for o, os_factor in enumerate(os_factors):
                     # model bl harmonic sig
                     freqs, amps, phase, dc = get_harmonics(Y[i, ...], f0, sr)
                     num_harmonics = len(freqs_base)
-                    y_bl = bandlimited_harmonic_signal(freqs[:num_harmonics],
-                                                       amps[:num_harmonics],
-                                                       phase[:num_harmonics],
+                    mask = (freqs < sr_base / 2).int()
+                    y_bl = bandlimited_harmonic_signal(freqs * mask,
+                                                       amps * mask,
+                                                       phase * mask,
                                                         dc, t_ax, sr)
 
                     # adjust to ensure equal first harmonic amps
@@ -100,18 +101,23 @@ for o, os_factor in enumerate(os_factors):
                     snr_harmonics[i, m, f, o] = snrh.numpy()
 
 
-    plt.figure(figsize=[10, 5])
-    plt.semilogx(f0_freqs, np.mean(snr_aliases[..., o], axis=-1), marker='+')
-    plt.title('Aliasing SNR -- OS = {}'.format(os_factor))
-    plt.xlabel('f0 [Hz]'), plt.ylabel('dB')
-    plt.legend(methods)
+        plt.figure(figsize=[10, 5])
+        plt.semilogx(f0_freqs, np.mean(snr_aliases[..., o], axis=-1), marker='+')
+        plt.title('Aliasing SNR -- OS = {}'.format(os_factor))
+        plt.xlabel('f0 [Hz]'), plt.ylabel('dB')
+        plt.ylim([0, 120])
+        plt.legend(methods)
+        plt.savefig('{}_{}_snra.png'.format(filename[:10], os_factor))
 
-    plt.figure(figsize=[10, 5])
-    plt.semilogx(f0_freqs.numpy(), np.mean(snr_harmonics[..., o], axis=-1), marker='+')
-    plt.title('OS = {}'.format(os_factor))
-    plt.xlabel('f0 [Hz]'), plt.ylabel('SNHR [dB]')
-    plt.legend(methods)
-    plt.show()
+        plt.figure(figsize=[10, 5])
+        plt.semilogx(f0_freqs.numpy(), np.mean(snr_harmonics[..., o], axis=-1), marker='+')
+        plt.title('OS = {}'.format(os_factor))
+        plt.xlabel('f0 [Hz]'), plt.ylabel('SNHR [dB]')
+        plt.ylim([0, 120])
+        plt.legend(methods)
+        plt.show()
+        plt.savefig('{}_{}_snrh.png'.format(filename[:10], os_factor))
+
 print("elapsed time: ", time.time() - start_time)
 #np.save('snr_aliases_mesamini.npy', snr_aliases)
 #np.save('snr_harmonics_mesamini.npy', snr_harmonics)

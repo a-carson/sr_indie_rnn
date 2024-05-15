@@ -1,6 +1,7 @@
 import numpy as np
 from torch.utils.data import Dataset, Sampler
 import torchaudio
+from utils.giant_fft_resample import giant_fft_resample
 import json
 import pytorch_lightning as pl
 from torch.utils.data import DataLoader
@@ -16,7 +17,8 @@ class RNNDataModule(pl.LightningDataModule):
                         batch_size: int = 1,
                         pin_memory: bool = True,
                         shuffle=True,
-                        os_factor: int = 1,
+                        orig_sr: int = 1,
+                        new_sr: int = 1,
                         config: str = '',
                         train_input: str = '',
                         train_target: str = '',
@@ -52,7 +54,8 @@ class RNNDataModule(pl.LightningDataModule):
         self.pin_memory = pin_memory
         self.batch_size = batch_size
         self.shuffle = shuffle
-        self.os_factor = os_factor
+        self.orig_sr = orig_sr
+        self.new_sr = new_sr
 
     def setup(self, stage: str) -> None:
 
@@ -63,14 +66,14 @@ class RNNDataModule(pl.LightningDataModule):
         test_input, sample_rate = torchaudio.load(self.dirs["test"]["input"])
         test_target, sample_rate = torchaudio.load(self.dirs["test"]["target"])
 
-        if self.os_factor > 1:
-            train_input = torchaudio.functional.resample(train_input, orig_freq=1, new_freq=self.os_factor)
-            train_target = torchaudio.functional.resample(train_target, orig_freq=1, new_freq=self.os_factor)
-            val_input = torchaudio.functional.resample(val_input, orig_freq=1, new_freq=self.os_factor)
-            val_target = torchaudio.functional.resample(val_target, orig_freq=1, new_freq=self.os_factor)
-            test_input = torchaudio.functional.resample(test_input, orig_freq=1, new_freq=self.os_factor)
-            test_target = torchaudio.functional.resample(test_target, orig_freq=1, new_freq=self.os_factor)
-            sample_rate *= self.os_factor
+        if self.orig_sr != self.new_sr:
+            train_input = giant_fft_resample(train_input, orig_freq=self.orig_sr, new_freq=self.new_sr)
+            train_target = giant_fft_resample(train_target, orig_freq=self.orig_sr, new_freq=self.new_sr)
+            val_input = giant_fft_resample(val_input, orig_freq=self.orig_sr, new_freq=self.new_sr)
+            val_target = giant_fft_resample(val_target, orig_freq=self.orig_sr, new_freq=self.new_sr)
+            test_input = giant_fft_resample(test_input, orig_freq=self.orig_sr, new_freq=self.new_sr)
+            test_target = giant_fft_resample(test_target, orig_freq=self.orig_sr, new_freq=self.new_sr)
+            sample_rate = int(sample_rate * self.new_sr / self.orig_sr)
 
         train_seq_length_samples = int(self.train_sequence_length_seconds * sample_rate)
         val_seq_length_samples = int(self.val_sequence_length_seconds * sample_rate)
