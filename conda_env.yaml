@@ -1,0 +1,20 @@
+name: sr_indie_rnn
+channels:
+  - defaults
+dependencies:
+  - python=3.10
+  - pip
+  - pip:
+    - aiohttp
+    - docstring-parser
+    - jsonargparse
+    - matplotlib
+    - pandas
+    - pip-chill
+    - pytorch-lightning
+    - soundfile
+    - torchaudio
+    - torchvision
+    - typeshed-client
+    - wandb
+    - wheel
