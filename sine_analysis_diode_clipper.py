@@ -50,7 +50,9 @@ if __name__ == '__main__':
     # init
     f0_freqs = torch.floor(440 * 2 ** ((midi - 69) / 12))       # need int values
     snr_aliases = np.zeros((len(f0_freqs), len(methods)))
-    snr_harmonics = np.zeros((len(f0_freqs), len(methods)))
+    snr_spec = np.zeros((len(f0_freqs), len(methods)))
+    snr_time = np.zeros((len(f0_freqs), len(methods)))
+
     thd = np.zeros((len(f0_freqs)))
 
     start_time = time.time()
@@ -139,6 +141,9 @@ if __name__ == '__main__':
             # adjust to ensure equal first harmonic amps
             Y_bl = cheb_fft(y_bl)
             Y_bl *= Y[f0].abs() / Y_bl[f0].abs()
+            Y_base_bl = cheb_fft(y_base_bl)
+            Y_base_bl *= Y_base[f0].abs() / Y_base_bl[f0].abs()
+
 
             # compute SNRs
             snra = snr_dB(sig=Y_bl[:num_samples//2].abs(),
@@ -146,13 +151,19 @@ if __name__ == '__main__':
             snr_aliases[i, m] = snra.numpy()
             print('SNRA =', snra.numpy())
 
-            snrh = snr_dB(sig=y_base_bl,
+            snrs = snr_dB(sig=Y_base_bl[:num_samples//2].abs() / sr_base,
+                          noise=Y_bl[:num_samples//2].abs() / sr - Y_base_bl[:num_samples//2].abs() / sr_base)
+            snr_spec[i, m] = snrs.numpy()
+            print('SNR_Spec =', snrs.numpy())
+
+            snrt = snr_dB(sig=y_base_bl,
                           noise=y_bl - y_base_bl)
-            snr_harmonics[i, m] = snrh.numpy()
-            print('SNRH =', snrh.numpy())
+            snr_time[i, m] = snrt.numpy()
+            print('SNR_Time =', snrt.numpy())
+
             if args.wandb:
                 run.log({"SNRAliasing_os={}".format(os_factor): snra.numpy(),
-                           "SNRHarmonics_os={}".format(os_factor): snrh.numpy(),
+                           "SNR_Time_os={}".format(os_factor): snr_time.numpy(),
                            "f0": f0,
                            "midi_note": midi[i]})
         if args.wandb:
@@ -169,14 +180,22 @@ if __name__ == '__main__':
     plt.show()
 
     plt.figure()
-    plt.semilogx(f0_freqs.numpy(), snr_harmonics)
+    plt.semilogx(f0_freqs.numpy(), snr_spec)
     plt.title('OS = {}'.format(os_factor))
-    plt.xlabel('f0 [Hz]'), plt.ylabel('SNHR [dB]')
+    plt.xlabel('f0 [Hz]'), plt.ylabel('SNR_Spec [dB]')
     plt.ylim([0, 120])
     plt.legend(methods)
     plt.show()
 
+    plt.figure()
+    plt.semilogx(f0_freqs.numpy(), snr_time)
+    plt.title('OS = {}'.format(os_factor))
+    plt.xlabel('f0 [Hz]'), plt.ylabel('SNR_Time [dB]')
+    plt.ylim([0, 120])
+    plt.legend(methods)
+    plt.show()
 
     print("elapsed time: ", time.time() - start_time)
     np.save('snra_sr={}.npy'.format(sr_base), snr_aliases)
-    np.save('snrh_sr={}.npy'.format(sr_base), snr_harmonics)
+    np.save('snrs_sr={}.npy'.format(sr_base), snr_spec)
+    np.save('snrt_sr={}.npy'.format(sr_base), snr_time)
