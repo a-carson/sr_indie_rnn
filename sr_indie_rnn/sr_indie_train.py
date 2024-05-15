@@ -90,7 +90,7 @@ class BaselineRNN(pl.LightningModule):
         # SAVE AUDIO
         if self.current_epoch == 0:
             if self.use_wandb:
-                wandb.log({'val_loss_og': loss.detach().numpy()})
+                wandb.log({'val_loss_og': loss.detach().cpu().numpy()})
             self.log_audio('Val_A_target', y[0, :, :])
             self.log_audio('Val_B_target', y[int(x.shape[0] / 2), :, :])
             self.log_audio('Val_C_target', y[-1, :, :])
