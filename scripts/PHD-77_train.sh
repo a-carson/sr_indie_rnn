@@ -12,7 +12,6 @@ for FILE in "$DIRECTORY"/*; do
 
   python3 main.py fit \
   --config configs/PHD-77/6505_allparams.yaml \
-  --trainer.max_epochs 0 \
   --data.device_name $DEVICE_NAME \
   --model.rnn_model_json $FILE \
   --custom.experiment_name $DEVICE_NAME \
