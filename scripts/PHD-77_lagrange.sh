@@ -17,5 +17,6 @@ for FILE in "$DIRECTORY"/*; do
   --model.rnn_model_json $FILE \
   --custom.experiment_name $DEVICE_NAME \
   --custom.name "$DEVICE_NAME$RUN_DETAIL" \
-  --trainer.accelerator gpu
+  --trainer.accelerator gpu \
+  --data.base_path '/disk/scratch1/s1409071/audio_datasets/dist_fx_192k'
 done
