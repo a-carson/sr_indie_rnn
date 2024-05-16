@@ -54,7 +54,7 @@ data:
     val_sequence_length_seconds: 10.0
     test_sequence_length_seconds: 10.0
     batch_size: 10
-    config: './configs/data/6505.json'
+    device_name: '6505Plus_Red_DirectOut'
     base_path: '/disk/scratch1/s1409071/audio_datasets/dist_fx_192k'
     orig_sr: 147
     new_sr: 160

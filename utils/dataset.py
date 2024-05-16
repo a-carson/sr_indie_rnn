@@ -19,6 +19,7 @@ class RNNDataModule(pl.LightningDataModule):
                         shuffle=True,
                         orig_sr: int = 1,
                         new_sr: int = 1,
+                        device_name: str = '',
                         config: str = '',
                         train_input: str = '',
                         train_target: str = '',
@@ -45,7 +46,12 @@ class RNNDataModule(pl.LightningDataModule):
 
         for key, value in self.dirs.items():
             for k, v in value.items():
-                self.dirs[key][k] = os.path.join(base_path, v)
+                if v == '':
+                    assert(device_name != '')
+                    filename = '{}-{}.wav'.format(device_name, k)
+                else:
+                    filename = v
+                self.dirs[key][k] = os.path.join(base_path, key, filename)
 
         self.train_sequence_length_seconds = train_sequence_length_seconds
         self.val_sequence_length_seconds = val_sequence_length_seconds
