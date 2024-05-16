@@ -32,6 +32,7 @@ class BaselineRNN(pl.LightningModule):
         self.log_audio_every_n_epochs = log_audio_every_n_epochs
 
         self.automatic_optimization = False
+        self.sanity_check_val = True
 
 
 
@@ -88,17 +89,18 @@ class BaselineRNN(pl.LightningModule):
         self.log("val_loss", loss, on_epoch=True, prog_bar=True, logger=True)
 
         # SAVE AUDIO
-        if self.current_epoch == 0:
+        if (self.current_epoch % self.log_audio_every_n_epochs) == 0:
+            self.log_audio('Val_A', y_pred[0, :, :])
+            self.log_audio('Val_B', y_pred[int(x.shape[0]/2), :, :])
+            self.log_audio('Val_C', y_pred[-1, :, :])
+
+        if self.sanity_check_val:
             if self.use_wandb:
                 wandb.log({'val_loss_og': loss.detach().cpu().numpy()})
             self.log_audio('Val_A_target', y[0, :, :])
             self.log_audio('Val_B_target', y[int(x.shape[0] / 2), :, :])
             self.log_audio('Val_C_target', y[-1, :, :])
-
-        if (self.current_epoch % self.log_audio_every_n_epochs) == 0:
-            self.log_audio('Val_A', y_pred[0, :, :])
-            self.log_audio('Val_B', y_pred[int(x.shape[0]/2), :, :])
-            self.log_audio('Val_C', y_pred[-1, :, :])
+            self.sanity_check_val = False
 
 
     def test_step(self, batch, batch_idx):
