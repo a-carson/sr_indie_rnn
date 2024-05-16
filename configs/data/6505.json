@@ -1,0 +1,14 @@
+{
+    "train": {
+    "input": "train/6505Plus_Red_DirectOut-input.wav",
+    "target": "train/6505Plus_Red_DirectOut-target.wav"
+    },
+    "val": {
+    "input": "val/6505Plus_Red_DirectOut-input.wav",
+    "target": "val/6505Plus_Red_DirectOut-target.wav"
+  },
+    "test": {
+    "input": "test/6505Plus_Red_DirectOut-input.wav",
+    "target": "test/6505Plus_Red_DirectOut-target.wav"
+    }
+}
