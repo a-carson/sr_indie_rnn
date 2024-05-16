@@ -16,5 +16,6 @@ for FILE in "$DIRECTORY"/*; do
   --data.device_name $DEVICE_NAME \
   --model.rnn_model_json $FILE \
   --custom.experiment_name $DEVICE_NAME \
-  --custom.name "$DEVICE_NAME$RUN_DETAIL"
+  --custom.name "$DEVICE_NAME$RUN_DETAIL" \
+  --trainer.accelerator gpu
 done
