@@ -33,6 +33,7 @@ class BaselineRNN(pl.LightningModule):
 
         self.automatic_optimization = False
         self.sanity_check_val = True
+        self.transient_trim = sample_rate
 
 
 
@@ -70,22 +71,10 @@ class BaselineRNN(pl.LightningModule):
 
     def validation_step(self, batch, batch_idx):
         x, y = batch
-        y_pred = torch.zeros_like(y)
         self.model.reset_state()
-        frame_size = self.sample_rate
-        num_frames = int(np.floor(x.shape[1] / frame_size))
-
-        # process in 1s frames
-        for n in range(num_frames):
-            start = frame_size * n
-            end = frame_size * (n+1)
-            x_frame = x[:, start:end, :]
-            y_pred_frame, _ = self.model(x_frame)
-            y_pred[:, start:end, :] = y_pred_frame
-            self.model.detach_state()
-
-
-        loss = self.loss_module(y, y_pred)
+        y_pred, _ = self.model(x)
+        loss = self.loss_module(y[:, self.transient_trim:, :],
+                                y_pred[:, self.transient_trim:, :])
         self.log("val_loss", loss, on_epoch=True, prog_bar=True, logger=True)
 
         # SAVE AUDIO
@@ -107,7 +96,8 @@ class BaselineRNN(pl.LightningModule):
         x, y = batch
         self.model.reset_state()
         y_pred, _ = self.model(x)
-        loss = self.loss_module(y, y_pred)
+        loss = self.loss_module(y[:,      self.transient_trim:, :],
+                                y_pred[:, self.transient_trim:, :])
         self.log("test_loss", loss, on_epoch=True, prog_bar=False, logger=True)
 
         # SAVE AUDIO
@@ -145,6 +135,7 @@ class FIRInterpRNN(PretrainedRNN):
                  rnn_model_json: str,
                  loss_module: torch.nn.Module,
                  sample_rate: int,
+                 double_precision: bool = False,
                  base_sample_rate = None,
                  tbptt_steps: int = 1024,
                  learning_rate: float = 5e-4,
@@ -160,6 +151,10 @@ class FIRInterpRNN(PretrainedRNN):
         for p in itertools.chain(self.model.rec.cell.parameters(), self.model.linear.parameters()):
             p.requires_grad = False
 
+        if double_precision:
+            self.model.double()
+        else:
+            self.model.float()
         print(self.model)
 
 

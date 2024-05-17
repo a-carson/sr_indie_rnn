@@ -253,7 +253,7 @@ class LagrangeInterp_RNN(torch.nn.Module):
         else:
             self.delta = self.os_factor - 1
             self.epsilon = 1
-        kernel = torch.ones(self.order+1, dtype=torch.float)
+        kernel = torch.ones(self.order+1, dtype=torch.double)
         for n in range(self.order+1):
             for k in range(self.order+1):
                 if k != n:
@@ -264,11 +264,11 @@ class LagrangeInterp_RNN(torch.nn.Module):
 
         batch_size = x.shape[0]
         num_samples = x.shape[1]
-
         states = x.new_zeros(batch_size, num_samples, self.state_size, device=x.device)
-        prev_states = x.new_zeros(batch_size, self.order + 1, self.state_size, device=x.device)
-        if h is not None:
-            prev_states[:,0,:] = tuple_to_vector(h)
+        if h is None:
+            prev_states = x.new_zeros(batch_size, self.order + 1, self.state_size, device=x.device)
+        else:
+            prev_states = tuple_to_vector(h)
 
         for i in range(x.shape[1]):
             h_read = self.kernel @ prev_states
@@ -278,7 +278,7 @@ class LagrangeInterp_RNN(torch.nn.Module):
             prev_states[:, -1, :] = states[:, i - self.epsilon + 1, :]
             prev_states = torch.roll(prev_states, dims=1, shifts=1)
 
-        return states[..., :self.hidden_size], vector_to_tuple(h)
+        return states[..., :self.hidden_size], vector_to_tuple(prev_states)
 
 class OptimalFIRInterp_RNN(LagrangeInterp_RNN):
 
