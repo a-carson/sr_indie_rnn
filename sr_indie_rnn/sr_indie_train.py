@@ -36,7 +36,21 @@ class BaselineRNN(pl.LightningModule):
         self.transient_trim = sample_rate
 
 
+    def forward_frames(self, x, frame_size=None):
+        y_pred = torch.zeros_like(x)
+        if frame_size is None:
+            frame_size = self.sample_rate
+        num_frames = int(np.floor(x.shape[1] / frame_size))
 
+        # process in 1s frames
+        for n in range(num_frames):
+            start = frame_size * n
+            end = frame_size * (n+1)
+            x_frame = x[:, start:end, :]
+            y_pred_frame, _ = self.model(x_frame)
+            y_pred[:, start:end, :] = y_pred_frame
+
+        return y_pred
 
     def training_step(self, batch, batch_idx):
 
@@ -72,7 +86,7 @@ class BaselineRNN(pl.LightningModule):
     def validation_step(self, batch, batch_idx):
         x, y = batch
         self.model.reset_state()
-        y_pred, _ = self.model(x)
+        y_pred = self.forward_frames(x)
         loss = self.loss_module(y[:, self.transient_trim:, :],
                                 y_pred[:, self.transient_trim:, :])
         self.log("val_loss", loss, on_epoch=True, prog_bar=True, logger=True)
@@ -95,7 +109,7 @@ class BaselineRNN(pl.LightningModule):
     def test_step(self, batch, batch_idx):
         x, y = batch
         self.model.reset_state()
-        y_pred, _ = self.model(x)
+        y_pred = self.forward_frames(x)
         loss = self.loss_module(y[:,      self.transient_trim:, :],
                                 y_pred[:, self.transient_trim:, :])
         self.log("test_loss", loss, on_epoch=True, prog_bar=False, logger=True)
